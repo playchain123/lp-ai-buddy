@@ -27,8 +27,40 @@ export async function chatFn(messages: { role: string; content: string }[], wall
   return data as { content: string; toolResults: any[] };
 }
 
+// LP Agent unwrap helpers — endpoints return { status, data } and sometimes { data: { data: [...] }}
+export function unwrap<T = any>(res: any): T {
+  if (res == null) return res;
+  if (res?.data?.data !== undefined) return res.data.data as T;
+  if (res?.data !== undefined) return res.data as T;
+  return res as T;
+}
+// Overview returns an array with one row.
+export function firstRow(res: any): any {
+  const u = unwrap<any>(res);
+  if (Array.isArray(u)) return u[0] ?? {};
+  return u ?? {};
+}
+export function listRows(res: any): any[] {
+  const u = unwrap<any>(res);
+  if (Array.isArray(u)) return u;
+  if (Array.isArray(u?.data)) return u.data;
+  if (Array.isArray(u?.pools)) return u.pools;
+  return [];
+}
+
+// Pull a value for a series of date-ranged metrics like { ALL, 7D, 1M, ... }
+export function rangeVal(v: any, range = "ALL"): number | null {
+  if (v == null) return null;
+  if (typeof v === "number") return v;
+  if (typeof v === "object") {
+    if (range in v) return Number(v[range]);
+    if ("ALL" in v) return Number(v.ALL);
+  }
+  return null;
+}
+
 // Format helpers
-export const fmtUsd = (n: number | string | null | undefined, opts?: { compact?: boolean }) => {
+export const fmtUsd = (n: number | string | null | undefined, opts?: { compact?: boolean; digits?: number }) => {
   const v = typeof n === "string" ? parseFloat(n) : n;
   if (v == null || isNaN(v as number)) return "—";
   const num = v as number;
@@ -37,13 +69,19 @@ export const fmtUsd = (n: number | string | null | undefined, opts?: { compact?:
     if (Math.abs(num) >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
     if (Math.abs(num) >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
   }
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: opts?.digits ?? 2 });
 };
 
 export const fmtPct = (n: number | string | null | undefined, digits = 2) => {
   const v = typeof n === "string" ? parseFloat(n) : n;
   if (v == null || isNaN(v as number)) return "—";
   return `${(v as number).toFixed(digits)}%`;
+};
+
+export const fmtNum = (n: any, d = 2) => {
+  const v = typeof n === "string" ? parseFloat(n) : n;
+  if (v == null || isNaN(v as number)) return "—";
+  return (v as number).toLocaleString(undefined, { maximumFractionDigits: d });
 };
 
 export const shortAddr = (a?: string | null, n = 4) =>
@@ -63,3 +101,54 @@ export const pick = (obj: any, keys: string[], dflt: any = undefined) => {
   }
   return dflt;
 };
+
+export type Position = {
+  id: string;
+  pool: string;
+  protocol: string;
+  pair: string;
+  t0: string;
+  t1: string;
+  logo0?: string;
+  logo1?: string;
+  currentValue: number;
+  inputValue: number;
+  pnl: number;
+  pnlPct: number;
+  fees: number;
+  apr: number | null;
+  inRange: boolean;
+  ageHour: number;
+  status: string;
+  raw: any;
+};
+
+export function normalizePosition(p: any): Position {
+  return {
+    id: pick(p, ["tokenId", "position", "id", "positionId"]) || "",
+    pool: pick(p, ["pool", "poolAddress"]) || "",
+    protocol: pick(p, ["protocol", "type"]) || "meteora",
+    pair: pick(p, ["pair", "pairName", "name"]) || `${pick(p, ["tokenName0", "token0Info.token_symbol"], "?")}/${pick(p, ["tokenName1", "token1Info.token_symbol"], "?")}`,
+    t0: pick(p, ["tokenName0", "token0Info.token_symbol"], "?"),
+    t1: pick(p, ["tokenName1", "token1Info.token_symbol"], "?"),
+    logo0: pick(p, ["logo0", "token0Info.logo"]),
+    logo1: pick(p, ["logo1", "token1Info.logo"]),
+    currentValue: Number(pick(p, ["currentValue", "value", "valueUsd"], 0)) || 0,
+    inputValue: Number(pick(p, ["inputValue", "value"], 0)) || 0,
+    pnl: Number(pick(p, ["pnl.value", "pnl", "pnlUsd"], 0)) || 0,
+    pnlPct: Number(pick(p, ["pnl.percent", "pnlPercent"], 0)) || 0,
+    fees: Number(pick(p, ["fee", "collectedFee", "totalFees", "feesEarned"], 0)) || 0,
+    apr: pick(p, ["apr", "currentApr"]) != null ? Number(pick(p, ["apr"])) : null,
+    inRange: !!pick(p, ["inRange", "isInRange"], false),
+    ageHour: Number(pick(p, ["ageHour", "age"], 0)) || 0,
+    status: pick(p, ["status"], "Open"),
+    raw: p,
+  };
+}
+
+export function protocolLabel(p?: string) {
+  if (!p) return "—";
+  if (p.includes("damm_v2") || p.includes("dammv2")) return "DAMM v2";
+  if (p.includes("dlmm")) return "DLMM";
+  return p.replace("meteora_", "").toUpperCase();
+}
