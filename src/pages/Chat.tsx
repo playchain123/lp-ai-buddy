@@ -151,20 +151,22 @@ function ToolCard({ tool, onZap }: { tool: any; onZap: (i: ZapIntent) => void })
     );
   }
   if (r._ui === "pools") {
-    const list = Array.isArray(r.pools) ? r.pools : (r.pools?.pools || r.pools?.data || []);
+    const list = Array.isArray(r.pools) ? r.pools : (r.pools?.data || r.pools?.pools || []);
     return (
       <div className="rounded-lg border border-border bg-card p-3 mb-2">
         <div className="text-xs text-muted-foreground mb-2">Pools matching your query</div>
         <div className="space-y-1.5 max-h-80 overflow-auto">
           {list.slice(0, 8).map((p: any, i: number) => {
-            const name = pick(p, ["pair", "name"]) || `${pick(p, ["token0.symbol", "tokenX.symbol"], "?")}/${pick(p, ["token1.symbol", "tokenY.symbol"], "?")}`;
+            const t0 = pick(p, ["token0_symbol", "token0.symbol"], "?");
+            const t1 = pick(p, ["token1_symbol", "token1.symbol"], "?");
+            const name = pick(p, ["pair", "name"]) || `${t0}/${t1}`;
             return (
               <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/50 last:border-0">
                 <div className="min-w-0">
                   <div className="font-medium text-sm truncate">{name}</div>
                   <div className="text-[11px] text-muted-foreground">
                     TVL {fmtUsd(pick(p, ["tvl", "tvlUsd"]), { compact: true })} ·
-                    Vol {fmtUsd(pick(p, ["volume24h", "volume24hUsd"]), { compact: true })} ·
+                    Vol {fmtUsd(pick(p, ["vol_24h", "volume24h"]), { compact: true })} ·
                     APR {fmtPct(pick(p, ["apr"], 0))}
                   </div>
                 </div>
