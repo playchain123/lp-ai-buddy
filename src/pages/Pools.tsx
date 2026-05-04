@@ -22,8 +22,9 @@ export default function Pools() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await lp("discoverPools", { search: search || undefined, sortBy, pageSize: 30 });
-      const list = Array.isArray(res) ? res : (res?.pools || res?.data || res?.items || []);
+      const sortKey = sortBy === "volume24h" ? "vol_24h" : sortBy === "tvl" ? "tvl" : "apr";
+      const res = await lp("discoverPools", { search: search || undefined, sortBy: sortKey, pageSize: 30 });
+      const list = Array.isArray(res) ? res : (res?.data || res?.pools || res?.items || []);
       setPools(list);
     } catch (e) {
       console.error(e);
@@ -89,13 +90,15 @@ export default function Pools() {
             </TableHeader>
             <TableBody>
               {pools.map((p, i) => {
-                const addr = pick(p, ["address", "poolAddress", "id", "poolId"]);
-                const name = pick(p, ["pair", "name"]) || `${pick(p, ["token0.symbol", "tokenX.symbol", "baseToken.symbol"], "?")}/${pick(p, ["token1.symbol", "tokenY.symbol", "quoteToken.symbol"], "?")}`;
+                const addr = pick(p, ["pool", "address", "poolAddress", "id", "poolId"]);
+                const t0 = pick(p, ["token0_symbol", "token0.symbol", "tokenX.symbol", "baseToken.symbol"], "?");
+                const t1 = pick(p, ["token1_symbol", "token1.symbol", "tokenY.symbol", "quoteToken.symbol"], "?");
+                const name = pick(p, ["pair", "name"]) || `${t0}/${t1}`;
                 const tvl = pick(p, ["tvl", "tvlUsd", "liquidity", "liquidityUsd"]);
-                const vol = pick(p, ["volume24h", "volume24hUsd", "vol24h"]);
-                const fees = pick(p, ["fees24h", "fees24hUsd"]);
-                const apr = pick(p, ["apr", "apr24h"]);
-                const type = pick(p, ["type", "protocol", "version"]) || "DLMM";
+                const vol = pick(p, ["vol_24h", "volume24h", "volume24hUsd"]);
+                const fees = pick(p, ["fees_24h", "fee_24h", "fees24h"]);
+                const apr = pick(p, ["apr", "apr_24h", "apr24h"]);
+                const type = pick(p, ["protocol", "type", "version"]) || "DLMM";
                 return (
                   <TableRow key={addr || i} className="hover:bg-secondary/40">
                     <TableCell>

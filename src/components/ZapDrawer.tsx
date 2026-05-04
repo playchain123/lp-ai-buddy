@@ -36,7 +36,7 @@ export function ZapDrawer({ intent, onClose }: { intent: ZapIntent | null; onClo
 function poolLabel(p: any) {
   return (
     pick(p, ["pair", "name", "poolName"]) ||
-    `${pick(p, ["token0.symbol", "tokenX.symbol", "baseToken.symbol"], "?")} / ${pick(p, ["token1.symbol", "tokenY.symbol", "quoteToken.symbol"], "?")}`
+    `${pick(p, ["token0_symbol", "token0.symbol", "tokenX.symbol", "baseToken.symbol"], "?")} / ${pick(p, ["token1_symbol", "token1.symbol", "tokenY.symbol", "quoteToken.symbol"], "?")}`
   );
 }
 
@@ -49,7 +49,7 @@ function ZapInPanel({ pool, onDone }: { pool: any; onDone: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [txSig, setTxSig] = useState<string | null>(null);
 
-  const poolId = pick(pool, ["address", "poolAddress", "id", "poolId"]);
+  const poolId = pick(pool, ["pool", "address", "poolAddress", "id", "poolId"]);
 
   const execute = async () => {
     if (!connected || !address) { await connect(); return; }
@@ -106,9 +106,9 @@ function ZapInPanel({ pool, onDone }: { pool: any; onDone: () => void }) {
           <div className="font-medium">{poolLabel(pool)}</div>
           <div className="text-xs text-muted-foreground font-mono">{shortAddr(poolId, 6)}</div>
           <div className="flex flex-wrap gap-2 text-xs pt-1">
-            <Badge variant="secondary">TVL {fmtUsd(pick(pool, ["tvl", "tvlUsd", "liquidity", "liquidityUsd"]), { compact: true })}</Badge>
-            <Badge variant="secondary">Vol 24h {fmtUsd(pick(pool, ["volume24h", "volume24hUsd", "vol24h"]), { compact: true })}</Badge>
-            <Badge variant="secondary">APR {Number(pick(pool, ["apr", "apr24h"], 0)).toFixed(1)}%</Badge>
+            <Badge variant="secondary">TVL {fmtUsd(pick(pool, ["tvl", "tvlUsd"]), { compact: true })}</Badge>
+            <Badge variant="secondary">Vol 24h {fmtUsd(pick(pool, ["vol_24h", "volume24h"]), { compact: true })}</Badge>
+            <Badge variant="secondary">APR {Number(pick(pool, ["apr", "apr_24h"], 0)).toFixed(1)}%</Badge>
           </div>
         </div>
 
