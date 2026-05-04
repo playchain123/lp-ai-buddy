@@ -128,46 +128,55 @@ function ToolCard({ tool, onZap }: { tool: any; onZap: (i: ZapIntent) => void })
   }
   if (r._ui === "portfolio") {
     const o = r.overview || {};
+    const totalFee = pick(o, ["total_fee.7D", "total_fee.ALL", "total_fee"], 0);
+    const pnl = pick(o, ["total_pnl.7D", "total_pnl.ALL", "total_pnl"], 0);
+    const winRate = pick(o, ["win_rate.7D", "win_rate.ALL", "win_rate"], 0);
+    const positions = (r.positions || []).map((p: any) => ({
+      pair: pick(p, ["pair", "pairName"]) || `${pick(p, ["tokenName0", "token0Info.token_symbol"], "?")}/${pick(p, ["tokenName1", "token1Info.token_symbol"], "?")}`,
+      value: Number(pick(p, ["currentValue", "value"], 0)),
+      pnl: Number(pick(p, ["pnl.value", "pnl"], 0)),
+      inRange: !!pick(p, ["inRange"], false),
+    }));
     return (
       <div className="rounded-lg border border-border bg-card p-3 mb-2">
         <div className="text-xs text-muted-foreground mb-2">Portfolio · {shortAddr(r.wallet, 4)}</div>
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <Mini label="Value" value={fmtUsd(pick(o, ["totalValue", "totalValueUsd"], 0))} />
-          <Mini label="Fees" value={fmtUsd(pick(o, ["totalFees", "feesEarned"], 0))} />
-          <Mini label="In Range" value={fmtPct(pick(o, ["inRangePercent", "inRange"], 0), 0)} />
+          <Mini label="Open" value={String(positions.length)} />
+          <Mini label="Fees 7D" value={fmtUsd(totalFee)} />
+          <Mini label="PnL 7D" value={fmtUsd(pnl)} />
         </div>
         <div className="space-y-1.5 max-h-72 overflow-auto">
-          {(r.positions || []).slice(0, 8).map((p: any, i: number) => {
-            const pair = pick(p, ["pair"]) || `${pick(p, ["token0.symbol", "tokenX.symbol"], "?")}/${pick(p, ["token1.symbol", "tokenY.symbol"], "?")}`;
-            return (
-              <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0">
-                <span className="font-medium">{pair}</span>
-                <span className="num">{fmtUsd(pick(p, ["currentValue", "valueUsd"]))}</span>
-              </div>
-            );
-          })}
+          {positions.slice(0, 8).map((p: any, i: number) => (
+            <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0">
+              <span className="font-medium flex items-center gap-2">
+                {p.pair}
+                {p.inRange ? <Badge variant="outline" className="bg-success/15 text-success border-success/30 text-[10px]">In</Badge> : <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-[10px]">Out</Badge>}
+              </span>
+              <span className="num">{fmtUsd(p.value)}</span>
+            </div>
+          ))}
+          {positions.length === 0 && <div className="text-xs text-muted-foreground py-2">No open positions.</div>}
         </div>
+        <div className="text-[11px] text-muted-foreground mt-2">Win rate {fmtPct(Number(winRate) * 100, 1)}</div>
       </div>
     );
   }
   if (r._ui === "pools") {
-    const list = Array.isArray(r.pools) ? r.pools : (r.pools?.data || r.pools?.pools || []);
+    const list = Array.isArray(r.pools) ? r.pools : (r.pools?.data || []);
     return (
       <div className="rounded-lg border border-border bg-card p-3 mb-2">
         <div className="text-xs text-muted-foreground mb-2">Pools matching your query</div>
         <div className="space-y-1.5 max-h-80 overflow-auto">
           {list.slice(0, 8).map((p: any, i: number) => {
-            const t0 = pick(p, ["token0_symbol", "token0.symbol"], "?");
-            const t1 = pick(p, ["token1_symbol", "token1.symbol"], "?");
-            const name = pick(p, ["pair", "name"]) || `${t0}/${t1}`;
+            const name = `${pick(p, ["token0_symbol"], "?")}/${pick(p, ["token1_symbol"], "?")}`;
             return (
               <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/50 last:border-0">
                 <div className="min-w-0">
                   <div className="font-medium text-sm truncate">{name}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    TVL {fmtUsd(pick(p, ["tvl", "tvlUsd"]), { compact: true })} ·
-                    Vol {fmtUsd(pick(p, ["vol_24h", "volume24h"]), { compact: true })} ·
-                    APR {fmtPct(pick(p, ["apr"], 0))}
+                    TVL {fmtUsd(pick(p, ["tvl"]), { compact: true })} ·
+                    Vol24h {fmtUsd(pick(p, ["vol_24h"]), { compact: true })} ·
+                    Fee {Number(pick(p, ["fee"], 0)).toFixed(2)}%
                   </div>
                 </div>
                 <Button size="sm" variant="outline" className="h-7" onClick={() => onZap({ kind: "in", pool: p })}>
