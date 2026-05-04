@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import Landing from "./pages/Landing";
 import Portfolio from "./pages/Portfolio";
 import Pools from "./pages/Pools";
+import PoolDetail from "./pages/PoolDetail";
 import Chat from "./pages/Chat";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/portfolio" element={<AppLayout><Portfolio /></AppLayout>} />
             <Route path="/pools" element={<AppLayout><Pools /></AppLayout>} />
+            <Route path="/pools/:id" element={<AppLayout><PoolDetail /></AppLayout>} />
             <Route path="/chat" element={<AppLayout><Chat /></AppLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
