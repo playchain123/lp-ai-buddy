@@ -102,18 +102,29 @@ async function executeTool(name: string, args: any, wallet: string | null) {
     switch (name) {
       case "get_portfolio": {
         if (!wallet) return { error: "No wallet connected. Ask the user to connect their Phantom wallet." };
-        const [overview, positions] = await Promise.all([
+        const [overview, positions, historical, revenue] = await Promise.all([
           callProxy("portfolioOverview", { owner: wallet }),
-          callProxy("openPositions", { owner: wallet }),
+          callProxy("openPositions", { owner: wallet, pageSize: 50 }),
+          callProxy("historicalPositions", { owner: wallet, pageSize: 20 }),
+          callProxy("revenue", { owner: wallet, range: args.range || "7D" }),
         ]);
-        return { overview: overview.data, positions: positions.data, _ui: "portfolio", wallet };
+        const ovRow = Array.isArray(overview.data) ? overview.data[0] : overview.data;
+        const posList = Array.isArray(positions.data) ? positions.data : (positions.data?.data || []);
+        const histList = Array.isArray(historical.data) ? historical.data : (historical.data?.data || []);
+        return {
+          overview: ovRow,
+          positions: posList,
+          historical: histList,
+          revenue: revenue.data,
+          _ui: "portfolio",
+          wallet,
+        };
       }
       case "list_pools": {
-        const p: any = { pageSize: args.pageSize || 10 };
+        const p: any = { pageSize: args.pageSize || 10, sortOrder: "desc" };
         if (args.search) p.search = args.search;
         if (args.minTvl) p.minTvl = args.minTvl;
-        if (args.minVolume24h) p.minVolume = args.minVolume24h;
-        if (args.minApr) p.minApr = args.minApr;
+        if (args.minVolume24h) p.minVol24h = args.minVolume24h;
         if (args.sortBy) p.sortBy = args.sortBy;
         const r = await callProxy("discoverPools", p);
         return { pools: r.data, _ui: "pools" };
