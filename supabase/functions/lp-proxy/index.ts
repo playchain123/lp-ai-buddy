@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
     switch (action) {
       // --- Discovery ---
       case "discoverPools": {
-        const p = { chain: "SOL", pageSize: 30, ...params };
+        const { poolId, ...rest } = params;
+        const p: any = { chain: "SOL", pageSize: 30, sortOrder: "desc", ...rest };
         result = await lpFetch("GET", "/pools/discover", apiKey, p);
         break;
       }
@@ -65,8 +66,11 @@ Deno.serve(async (req) => {
       case "poolOnchainStats":
         result = await lpFetch("GET", `/pools/${params.poolId}/onchain-stats`, apiKey);
         break;
+      case "poolPositions":
+        result = await lpFetch("GET", `/pools/${params.poolId}/positions`, apiKey, { pageSize: 20, ...params });
+        break;
       case "poolTopLpers":
-        result = await lpFetch("GET", `/pools/${params.poolId}/top-lpers`, apiKey, params);
+        result = await lpFetch("GET", `/pools/${params.poolId}/top-lpers`, apiKey, { pageSize: 10, ...params });
         break;
 
       // --- Portfolio ---
