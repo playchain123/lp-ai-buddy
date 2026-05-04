@@ -37,7 +37,7 @@ const TOOLS = [
           minTvl: { type: "number", description: "Minimum TVL USD." },
           minVolume24h: { type: "number", description: "Minimum 24h volume USD." },
           minApr: { type: "number", description: "Minimum APR percent." },
-          sortBy: { type: "string", enum: ["tvl", "volume24h", "apr"], description: "Sort key." },
+          sortBy: { type: "string", enum: ["tvl", "vol_24h", "vol_1h", "fee"], description: "Sort key." },
           pageSize: { type: "number", description: "Default 10, max 30." },
         },
       },
