@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { lp, fmtUsd, fmtPct, pick, shortAddr, listRows, protocolLabel } from "@/lib/lpAgent";
+import { lp, fmtUsd, fmtPct, pick, shortAddr, listRows, protocolLabel, poolSymbols } from "@/lib/lpAgent";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,13 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Zap, ArrowUpDown, ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 import { ZapDrawer, ZapIntent } from "@/components/ZapDrawer";
 
-type Sort = "tvl" | "vol_24h" | "fee" | "vol_1h";
+type Sort = "tvl" | "vol_24h" | "fee_tvl_ratio" | "vol_1h";
 
 const SORT_LABELS: Record<Sort, string> = {
   tvl: "TVL",
   vol_24h: "Volume 24h",
   vol_1h: "Volume 1h",
-  fee: "Fee tier",
+  fee_tvl_ratio: "Fee/TVL",
 };
 
 export default function Pools() {
@@ -30,8 +30,13 @@ export default function Pools() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await lp("discoverPools", { search: search || undefined, sortBy, sortOrder: "desc", pageSize: 30 });
-      setPools(listRows(res));
+      const res = await lp("discoverPools", { search: search || undefined, sortBy, sortOrder: "desc", pageSize: 50 });
+      const rows = listRows(res);
+      const enriched = await Promise.allSettled(rows.slice(0, 20).map(async (p) => {
+        const info = await lp("poolInfo", { poolId: p.pool });
+        return { ...p, __info: info };
+      }));
+      setPools(rows.map((p, i) => enriched[i]?.status === "fulfilled" ? (enriched[i] as PromiseFulfilledResult<any>).value : p));
     } catch (e) {
       console.error(e);
       setPools([]);
@@ -97,8 +102,7 @@ export default function Pools() {
             <TableBody>
               {pools.map((p, i) => {
                 const addr = pick(p, ["pool", "address", "id"]);
-                const t0 = pick(p, ["token0_symbol"], "?");
-                const t1 = pick(p, ["token1_symbol"], "?");
+                const { token0: t0, token1: t1, icon0, icon1 } = poolSymbols(p);
                 const tvl = pick(p, ["tvl"]);
                 const vol24 = pick(p, ["vol_24h"]);
                 const vol1h = pick(p, ["vol_1h"]);
@@ -108,7 +112,13 @@ export default function Pools() {
                 return (
                   <TableRow key={addr || i} className="hover:bg-secondary/40 cursor-pointer" onClick={() => navigate(`/pools/${addr}`)}>
                     <TableCell>
-                      <div className="font-medium">{t0} / {t1}</div>
+                      <div className="flex items-center gap-2 font-medium">
+                        <span className="flex items-center">
+                          {icon0 ? <img src={icon0} alt={`${t0} logo`} className="h-5 w-5 rounded-full" onError={(e) => (e.currentTarget.style.display = "none")} /> : <span className="h-5 w-5 rounded-full bg-secondary inline-flex items-center justify-center text-[9px]">{t0.slice(0, 2)}</span>}
+                          {icon1 ? <img src={icon1} alt={`${t1} logo`} className="h-5 w-5 rounded-full -ml-1.5" onError={(e) => (e.currentTarget.style.display = "none")} /> : <span className="h-5 w-5 rounded-full bg-secondary -ml-1.5 inline-flex items-center justify-center text-[9px]">{t1.slice(0, 2)}</span>}
+                        </span>
+                        {t0} / {t1}
+                      </div>
                       <div className="text-xs text-muted-foreground font-mono flex items-center gap-1">
                         {shortAddr(addr, 4)}
                         <a onClick={(e) => e.stopPropagation()} href={`https://app.meteora.ag/pools/${addr}`} target="_blank" rel="noreferrer" className="hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>
