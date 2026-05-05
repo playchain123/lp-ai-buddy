@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.zap-execute]
 verify_jwt = false
+
+[functions.telegram-poll]
+verify_jwt = false
