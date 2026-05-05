@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const GATEWAY = "https://connector-gateway.lovable.dev/telegram";
+const APP_URL = "https://lp-ai-buddy.lovable.app";
 const MAX_RUNTIME_MS = 55_000;
 const MIN_REMAINING_MS = 5_000;
 
@@ -32,6 +33,80 @@ async function callChat(messages: any[], wallet: string | null) {
     body: JSON.stringify({ messages, wallet }),
   });
   return r.json();
+}
+
+async function callProxy(action: string, params?: any, body?: any) {
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/lp-proxy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}` },
+    body: JSON.stringify({ action, params, body }),
+  });
+  const j = await r.json();
+  if (!r.ok || !j?.ok) throw new Error(j?.error || `LP Agent proxy ${r.status}`);
+  return j.data;
+}
+
+function unwrap(v: any) {
+  if (v?.data?.data !== undefined) return v.data.data;
+  if (v?.data !== undefined) return v.data;
+  return v;
+}
+
+function rows(v: any) {
+  const u = unwrap(v);
+  if (Array.isArray(u)) return u;
+  if (Array.isArray(u?.positions)) return u.positions;
+  if (Array.isArray(u?.data)) return u.data;
+  return [];
+}
+
+const usd = (v: any) => `$${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+async function quoteRebalance(supabase: any, chatId: number, wallet: string, text: string) {
+  const lower = text.toLowerCase();
+  const amount = Number((lower.match(/(\d+(?:\.\d+)?)\s*sol/) || [])[1] || 0.1);
+  const wantsOut = /out|close|withdraw|exit/.test(lower);
+
+  if (wantsOut) {
+    const positionsRes = await callProxy("openPositions", { owner: wallet, pageSize: 20 });
+    const positions = rows(positionsRes);
+    const position = positions[0];
+    if (!position) {
+      await tg("sendMessage", { chat_id: chatId, text: "No open LP positions found for your linked wallet." });
+      return;
+    }
+    const positionId = position.id || position.positionId || position.tokenId;
+    const quote = await callProxy("zapOutQuote", undefined, { id: positionId, bps: 10000 });
+    const { data: intent } = await supabase.from("telegram_rebalance_intents").insert({
+      chat_id: chatId, wallet, action: "zap_out", position_id: positionId, bps: 10000, quote,
+    }).select("id").single();
+    await tg("sendMessage", {
+      chat_id: chatId,
+      text: `⚖️ <b>Rebalance quote</b>\nAction: Zap Out 100%\nPosition: <code>${String(positionId).slice(0, 8)}…</code>\n\nConfirm to prepare the wallet-signing flow.`,
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[
+        { text: "✅ Confirm", callback_data: `rebalance_confirm:${intent.id}` },
+        { text: "Cancel", callback_data: `rebalance_cancel:${intent.id}` },
+      ]] },
+    });
+    return;
+  }
+
+  const poolRes = await callProxy("discoverPools", { sortBy: "vol_24h", sortOrder: "desc", pageSize: 1, search: lower.includes("sol") ? "SOL" : undefined });
+  const pool = rows(poolRes)[0];
+  if (!pool?.pool) throw new Error("No live pools returned by LP Agent");
+  const { data: intent } = await supabase.from("telegram_rebalance_intents").insert({
+    chat_id: chatId, wallet, action: "zap_in", pool_id: pool.pool, amount_sol: amount, strategy: "Spot", quote: pool,
+  }).select("id").single();
+  await tg("sendMessage", {
+    chat_id: chatId,
+    text: `⚖️ <b>Rebalance quote</b>\nAction: Zap In\nPool: <b>${pool.token0_symbol}/${pool.token1_symbol}</b>\nAmount: <code>${amount} SOL</code>\nTVL: ${usd(pool.tvl)}\nVol 24h: ${usd(pool.vol_24h)}\n24h Δ: ${Number(pool.price_24h_change || 0).toFixed(2)}%\n\nConfirm to open the wallet-signing flow.`,
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: [[
+      { text: "✅ Confirm", callback_data: `rebalance_confirm:${intent.id}` },
+      { text: "Cancel", callback_data: `rebalance_cancel:${intent.id}` },
+    ]] },
+  });
 }
 
 function fmtToolReply(content: string, tools: any[]): string {
