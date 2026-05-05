@@ -74,6 +74,63 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_rebalance_intents: {
+        Row: {
+          action: string
+          amount_sol: number | null
+          bps: number | null
+          chat_id: number
+          created_at: string
+          error: string | null
+          expires_at: string
+          id: string
+          output: string
+          pool_id: string | null
+          position_id: string | null
+          quote: Json
+          status: string
+          strategy: string
+          updated_at: string
+          wallet: string
+        }
+        Insert: {
+          action: string
+          amount_sol?: number | null
+          bps?: number | null
+          chat_id: number
+          created_at?: string
+          error?: string | null
+          expires_at?: string
+          id?: string
+          output?: string
+          pool_id?: string | null
+          position_id?: string | null
+          quote?: Json
+          status?: string
+          strategy?: string
+          updated_at?: string
+          wallet: string
+        }
+        Update: {
+          action?: string
+          amount_sol?: number | null
+          bps?: number | null
+          chat_id?: number
+          created_at?: string
+          error?: string | null
+          expires_at?: string
+          id?: string
+          output?: string
+          pool_id?: string | null
+          position_id?: string | null
+          quote?: Json
+          status?: string
+          strategy?: string
+          updated_at?: string
+          wallet?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
