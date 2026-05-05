@@ -141,6 +141,37 @@ function fmtToolReply(content: string, tools: any[]): string {
 }
 
 async function handleUpdate(supabase: any, update: any) {
+  if (update.callback_query) {
+    const q = update.callback_query;
+    const chatId = q.message?.chat?.id;
+    const data = q.data || "";
+    await tg("answerCallbackQuery", { callback_query_id: q.id }).catch(() => {});
+    if (data.startsWith("rebalance_cancel:")) {
+      const id = data.split(":")[1];
+      await supabase.from("telegram_rebalance_intents").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", id);
+      await tg("sendMessage", { chat_id: chatId, text: "Cancelled." });
+      return;
+    }
+    if (data.startsWith("rebalance_confirm:")) {
+      const id = data.split(":")[1];
+      const { data: intent } = await supabase.from("telegram_rebalance_intents").select("*").eq("id", id).maybeSingle();
+      if (!intent || intent.status !== "pending" || new Date(intent.expires_at).getTime() < Date.now()) {
+        await tg("sendMessage", { chat_id: chatId, text: "This rebalance quote expired. Send /rebalance again." });
+        return;
+      }
+      await supabase.from("telegram_rebalance_intents").update({ status: "confirmed", updated_at: new Date().toISOString() }).eq("id", id);
+      const url = intent.action === "zap_in"
+        ? `${APP_URL}/pools/${intent.pool_id}?zap=in&amount=${intent.amount_sol || 0.1}`
+        : `${APP_URL}/portfolio?wallet=${intent.wallet}&rebalance=${id}`;
+      await tg("sendMessage", {
+        chat_id: chatId,
+        text: "✅ Confirmed. Open the secure wallet flow to sign and execute the real LP Agent transaction.",
+        reply_markup: { inline_keyboard: [[{ text: "Open signing flow", url }]] },
+      });
+      return;
+    }
+  }
+
   const msg = update.message;
   if (!msg?.text) return;
   const chatId = msg.chat.id;
@@ -173,6 +204,14 @@ async function handleUpdate(supabase: any, update: any) {
   let prompt = text;
   if (text.startsWith("/portfolio")) prompt = "Show my portfolio";
   else if (text.startsWith("/pools")) prompt = "Show top pools by 24h volume";
+  else if (text.startsWith("/rebalance") || /rebalance|zap in|zap out|close position|withdraw/i.test(text)) {
+    if (!wallet) {
+      await tg("sendMessage", { chat_id: chatId, text: "Link your wallet first with <code>/wallet &lt;address&gt;</code>", parse_mode: "HTML" });
+      return;
+    }
+    await quoteRebalance(supabase, chatId, wallet, text);
+    return;
+  }
 
   await tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
 
@@ -202,7 +241,7 @@ Deno.serve(async (req) => {
 
     let updates: any[] = [];
     try {
-      const r = await tg("getUpdates", { offset, timeout, allowed_updates: ["message"] });
+      const r = await tg("getUpdates", { offset, timeout, allowed_updates: ["message", "callback_query"] });
       updates = r.result || [];
     } catch (e) {
       console.error("getUpdates failed:", e);
