@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useWallet } from "@/wallet/WalletProvider";
-import { zapFn, fmtUsd, pick, shortAddr } from "@/lib/lpAgent";
+import { zapFn, fmtUsd, pick, shortAddr, poolAddress, poolLabel, extractTxBundle } from "@/lib/lpAgent";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, ExternalLink, Zap } from "lucide-react";
 import { Connection } from "@solana/web3.js";
@@ -33,13 +33,6 @@ export function ZapDrawer({ intent, onClose }: { intent: ZapIntent | null; onClo
   );
 }
 
-function poolLabel(p: any) {
-  return (
-    pick(p, ["pair", "name", "poolName"]) ||
-    `${pick(p, ["token0_symbol", "token0.symbol", "tokenX.symbol", "baseToken.symbol"], "?")} / ${pick(p, ["token1_symbol", "token1.symbol", "tokenY.symbol", "quoteToken.symbol"], "?")}`
-  );
-}
-
 function ZapInPanel({ pool, onDone }: { pool: any; onDone: () => void }) {
   const { connected, address, connect, signAndSendBase64Txs, rpcEndpoint } = useWallet();
   const [amount, setAmount] = useState("0.1");
@@ -49,7 +42,7 @@ function ZapInPanel({ pool, onDone }: { pool: any; onDone: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [txSig, setTxSig] = useState<string | null>(null);
 
-  const poolId = pick(pool, ["pool", "address", "poolAddress", "id", "poolId"]);
+  const poolId = poolAddress(pool);
 
   const execute = async () => {
     if (!connected || !address) { await connect(); return; }
@@ -62,24 +55,34 @@ function ZapInPanel({ pool, onDone }: { pool: any; onDone: () => void }) {
       });
       setBuilding(false);
 
-      // LP Agent typically returns { transactions: string[] } or { txs: string[] }
-      const txs: string[] = built?.transactions || built?.txs || built?.data?.transactions || [];
+      const bundle = extractTxBundle(built);
+      const txs: string[] = bundle.txs;
       if (!txs.length) throw new Error("No transactions returned by LP Agent");
 
       setSubmitting(true);
       const signed = await signAndSendBase64Txs(txs);
+      const swapSigned = signed.slice(0, bundle.swap.length);
+      const addSigned = signed.slice(bundle.swap.length, bundle.swap.length + bundle.add.length);
 
       // Try LP Agent's landing endpoint (Jito), fallback to direct RPC if it fails.
       try {
-        const land = await zapFn("zapInLand", { signedTxs: signed });
+        const land = await zapFn("zapInLand", {
+          lastValidBlockHeight: bundle.lastValidBlockHeight,
+          swapTxsWithJito: swapSigned,
+          addLiquidityTxsWithJito: addSigned.length ? addSigned : signed,
+          meta: bundle.d?.meta,
+        });
         const sig = land?.signature || land?.signatures?.[0] || land?.txSignature;
         if (sig) { setTxSig(sig); toast({ title: "Zap landed", description: shortAddr(sig, 6) }); return; }
       } catch (e) {
         console.warn("landing failed, falling back to RPC", e);
       }
       const conn = new Connection(rpcEndpoint, "confirmed");
-      const buf = Uint8Array.from(atob(signed[0]), (c) => c.charCodeAt(0));
-      const sig = await conn.sendRawTransaction(buf, { skipPreflight: false });
+      let sig = "";
+      for (const s of signed) {
+        const buf = Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+        sig = await conn.sendRawTransaction(buf, { skipPreflight: false });
+      }
       setTxSig(sig);
       toast({ title: "Submitted", description: shortAddr(sig, 6) });
     } catch (e: any) {
@@ -187,17 +190,27 @@ function ZapOutPanel({ position, onDone }: { position: any; onDone: () => void }
     try {
       setBusy(true);
       const built = await zapFn("zapOutBuild", { positionId, owner: address, bps, output, slippageBps: 100 });
-      const txs: string[] = built?.transactions || built?.txs || built?.data?.transactions || [];
+      const bundle = extractTxBundle(built);
+      const txs: string[] = bundle.txs;
       if (!txs.length) throw new Error("No transactions returned");
       const signed = await signAndSendBase64Txs(txs);
+      const swapSigned = signed.slice(0, bundle.swap.length);
+      const closeSigned = signed.slice(bundle.swap.length, bundle.swap.length + bundle.close.length);
       try {
-        const land = await zapFn("zapOutLand", { signedTxs: signed });
+        const land = await zapFn("zapOutLand", {
+          lastValidBlockHeight: bundle.lastValidBlockHeight,
+          swapTxsWithJito: swapSigned,
+          closeTxsWithJito: closeSigned.length ? closeSigned : signed,
+        });
         const sig = land?.signature || land?.signatures?.[0];
         if (sig) { setTxSig(sig); toast({ title: "Zap out landed", description: shortAddr(sig, 6) }); return; }
       } catch {}
       const conn = new Connection(rpcEndpoint, "confirmed");
-      const buf = Uint8Array.from(atob(signed[0]), (c) => c.charCodeAt(0));
-      const sig = await conn.sendRawTransaction(buf, { skipPreflight: false });
+      let sig = "";
+      for (const s of signed) {
+        const buf = Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+        sig = await conn.sendRawTransaction(buf, { skipPreflight: false });
+      }
       setTxSig(sig);
       toast({ title: "Submitted", description: shortAddr(sig, 6) });
     } catch (e: any) {

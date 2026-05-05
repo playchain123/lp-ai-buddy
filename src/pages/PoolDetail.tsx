@@ -15,6 +15,7 @@ export default function PoolDetail() {
   const [info, setInfo] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
   const [topLpers, setTopLpers] = useState<any[]>([]);
+  const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [intent, setIntent] = useState<ZapIntent | null>(null);
 
@@ -24,12 +25,14 @@ export default function PoolDetail() {
     Promise.allSettled([
       lp("poolInfo", { poolId: id }),
       lp("poolOnchainStats", { poolId: id }),
-      lp("poolTopLpers", { poolId: id, pageSize: 10 }),
-    ]).then(([i, s, t]) => {
+      lp("poolTopLpers", { poolId: id, page: 1, limit: 100 }),
+      lp("poolPositions", { poolId: id, page: 1, pageSize: 20, status: "Open" }),
+    ]).then(([i, s, t, p]) => {
       setInfo(i.status === "fulfilled" ? unwrap(i.value) : null);
       const sd = s.status === "fulfilled" ? unwrap(s.value) : null;
       setStats(sd?.poolStats?.[0] ?? sd);
       setTopLpers(t.status === "fulfilled" ? listRows(t.value) : []);
+      setPositions(p.status === "fulfilled" ? listRows(p.value) : []);
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -37,6 +40,7 @@ export default function PoolDetail() {
   const t1 = info?.tokenInfo?.[1]?.data?.[0];
   const sym0 = t0?.symbol || "?";
   const sym1 = t1?.symbol || "?";
+  const primary = t1 || t0;
   const proto = info?.type;
 
   // Build price chart from token1 (typically SOL/USDC) stats5m..stats24h
@@ -77,11 +81,11 @@ export default function PoolDetail() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-        <Stat label={`${sym1} Price`} value={t1?.usdPrice != null ? fmtUsd(t1.usdPrice, { digits: t1.usdPrice < 1 ? 6 : 2 }) : "—"} />
-        <Stat label={`${sym1} MCap`} value={t1?.mcap != null ? fmtUsd(t1.mcap, { compact: true }) : "—"} />
-        <Stat label={`${sym1} Liquidity`} value={t1?.liquidity != null ? fmtUsd(t1.liquidity, { compact: true }) : "—"} />
-        <Stat label={`${sym1} Holders`} value={t1?.holderCount ? fmtNum(t1.holderCount, 0) : "—"} />
-        <Stat label="Open Positions" value={fmtNum(stats?.total_open_positions ?? 0, 0)} />
+        <Stat label={`${primary?.symbol || sym1} Price`} value={primary?.usdPrice != null ? fmtUsd(primary.usdPrice, { digits: primary.usdPrice < 1 ? 6 : 2 }) : "—"} />
+        <Stat label="Market Cap" value={primary?.mcap != null ? fmtUsd(primary.mcap, { compact: true }) : "—"} />
+        <Stat label="Liquidity" value={primary?.liquidity != null ? fmtUsd(primary.liquidity, { compact: true }) : "—"} />
+        <Stat label="TVL" value={fmtUsd(info?.poolDb?.tvl ?? stats?.total_input_value, { compact: true })} />
+        <Stat label="Open Positions" value={fmtNum(stats?.total_open_positions ?? positions.length, 0)} />
         <Stat label="Unique LPers" value={fmtNum(stats?.unique_owners ?? 0, 0)} />
       </div>
 
@@ -135,8 +139,8 @@ export default function PoolDetail() {
       </div>
 
       {/* Top LPers */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border font-semibold">Top LPers</div>
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border font-semibold">All LPers returned by LP Agent ({topLpers.length})</div>
         {loading ? (
           <div className="p-4 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
         ) : topLpers.length === 0 ? (

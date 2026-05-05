@@ -20,6 +20,10 @@ async function lp(method: string, path: string, apiKey: string, body?: any, qs?:
   return j;
 }
 
+function unwrapData(v: any) {
+  return v?.data ?? v;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -31,17 +35,20 @@ Deno.serve(async (req) => {
     if (op === "zapInBuild") {
       // payload: { poolId, owner, amountSol, strategy, slippageBps, range? }
       const info = await lp("GET", `/pools/${payload.poolId}/info`, apiKey);
-      const activeBinId = info?.activeBinId ?? info?.activeBin?.binId ?? info?.data?.activeBinId ?? 0;
+      const infoData = unwrapData(info);
+      const activeBinId = infoData?.activeBinId ?? infoData?.activeBin?.binId ?? infoData?.poolState?.activeId ?? infoData?.poolState?.activeBinId ?? 0;
       const span = payload.binSpan ?? 34; // ~standard range
       const fromBinId = payload.fromBinId ?? activeBinId - span;
       const toBinId = payload.toBinId ?? activeBinId + span;
-      const lamports = Math.floor(payload.amountSol * 1e9);
+      const amountSol = Number(payload.amountSol ?? payload.inputSOL);
+      if (!Number.isFinite(amountSol) || amountSol <= 0) throw new Error("Enter a valid SOL amount for Zap In");
       const body = {
         stratergy: payload.strategy || "Spot",
         owner: payload.owner,
         mode: "zap-in",
-        slippage: payload.slippageBps ?? 100,
-        amount: String(lamports),
+        inputSOL: amountSol,
+        slippage_bps: payload.slippageBps ?? payload.slippage_bps ?? 500,
+        provider: payload.provider || "JUPITER_ULTRA",
         fromBinId,
         toBinId,
       };
@@ -52,7 +59,13 @@ Deno.serve(async (req) => {
     }
 
     if (op === "zapInLand") {
-      data = await lp("POST", "/pools/landing-add-tx", apiKey, payload);
+      const body = {
+        lastValidBlockHeight: payload.lastValidBlockHeight,
+        swapTxsWithJito: payload.swapTxsWithJito || [],
+        addLiquidityTxsWithJito: payload.addLiquidityTxsWithJito || payload.signedTxs || [],
+        meta: payload.meta,
+      };
+      data = await lp("POST", "/pools/landing-add-tx", apiKey, body);
       return new Response(JSON.stringify({ ok: true, data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -66,6 +79,7 @@ Deno.serve(async (req) => {
         bps: payload.bps ?? 10000,
         slippage_bps: payload.slippageBps ?? 100,
         output: payload.output || "allBaseToken",
+        provider: payload.provider || "JUPITER_ULTRA",
       };
       data = await lp("POST", "/position/decrease-tx", apiKey, body);
       return new Response(JSON.stringify({ ok: true, data }), {
@@ -74,7 +88,12 @@ Deno.serve(async (req) => {
     }
 
     if (op === "zapOutLand") {
-      data = await lp("POST", "/position/landing-decrease-tx", apiKey, payload);
+      const body = {
+        lastValidBlockHeight: payload.lastValidBlockHeight,
+        closeTxsWithJito: payload.closeTxsWithJito || payload.signedTxs || [],
+        swapTxsWithJito: payload.swapTxsWithJito || [],
+      };
+      data = await lp("POST", "/position/landing-decrease-tx", apiKey, body);
       return new Response(JSON.stringify({ ok: true, data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

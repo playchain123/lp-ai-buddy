@@ -45,6 +45,9 @@ export function listRows(res: any): any[] {
   if (Array.isArray(u)) return u;
   if (Array.isArray(u?.data)) return u.data;
   if (Array.isArray(u?.pools)) return u.pools;
+  if (Array.isArray(u?.positions)) return u.positions;
+  if (Array.isArray(u?.items)) return u.items;
+  if (Array.isArray(u?.results)) return u.results;
   return [];
 }
 
@@ -86,6 +89,37 @@ export const fmtNum = (n: any, d = 2) => {
 
 export const shortAddr = (a?: string | null, n = 4) =>
   a ? `${a.slice(0, n)}…${a.slice(-n)}` : "";
+
+export const poolAddress = (p: any) => pick(p, ["pool", "address", "poolAddress", "id", "poolId"]);
+
+export const tokenFromInfo = (info: any, index: 0 | 1) =>
+  pick(info, [`tokenInfo.${index}.data.0`], {}) || {};
+
+export const poolSymbols = (p: any) => {
+  const info = p?.__info || p;
+  const t0 = p?.__t0 || tokenFromInfo(info, 0);
+  const t1 = p?.__t1 || tokenFromInfo(info, 1);
+  return {
+    token0: pick(p, ["token0_symbol", "token0.symbol", "tokenX.symbol", "baseToken.symbol"]) || t0?.symbol || "?",
+    token1: pick(p, ["token1_symbol", "token1.symbol", "tokenY.symbol", "quoteToken.symbol"]) || t1?.symbol || "?",
+    icon0: pick(p, ["token0_icon", "logo0", "__t0.icon"]) || t0?.icon,
+    icon1: pick(p, ["token1_icon", "logo1", "__t1.icon"]) || t1?.icon,
+  };
+};
+
+export const poolLabel = (p: any) => {
+  const s = poolSymbols(p);
+  return pick(p, ["pair", "name", "poolName"]) || `${s.token0} / ${s.token1}`;
+};
+
+export const extractTxBundle = (built: any) => {
+  const d = built?.data || built;
+  const swap = d?.swapTxsWithJito || d?.swapTxs || [];
+  const add = d?.addLiquidityTxsWithJito || d?.addLiquidityTxs || [];
+  const close = d?.closeTxsWithJito || d?.closeTxs || [];
+  const txs = [...swap, ...add, ...close].filter(Boolean);
+  return { d, swap, add, close, txs, lastValidBlockHeight: d?.lastValidBlockHeight };
+};
 
 // Best-effort field extraction from variable LP Agent shapes
 export const pick = (obj: any, keys: string[], dflt: any = undefined) => {

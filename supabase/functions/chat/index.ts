@@ -94,7 +94,29 @@ async function callProxy(action: string, params?: any, body?: any) {
     },
     body: JSON.stringify({ action, params, body }),
   });
-  return res.json();
+  const j = await res.json();
+  if (!res.ok || !j?.ok) throw new Error(j?.error || `LP proxy ${res.status}`);
+  return j.data;
+}
+
+function unwrap(v: any) {
+  if (v?.data?.data !== undefined) return v.data.data;
+  if (v?.data !== undefined) return v.data;
+  return v;
+}
+
+function firstRow(v: any) {
+  const u = unwrap(v);
+  return Array.isArray(u) ? (u[0] || {}) : (u || {});
+}
+
+function rows(v: any) {
+  const u = unwrap(v);
+  if (Array.isArray(u)) return u;
+  if (Array.isArray(u?.positions)) return u.positions;
+  if (Array.isArray(u?.pools)) return u.pools;
+  if (Array.isArray(u?.data)) return u.data;
+  return [];
 }
 
 async function executeTool(name: string, args: any, wallet: string | null) {
@@ -108,14 +130,14 @@ async function executeTool(name: string, args: any, wallet: string | null) {
           callProxy("historicalPositions", { owner: wallet, pageSize: 20 }),
           callProxy("revenue", { owner: wallet, range: args.range || "7D" }),
         ]);
-        const ovRow = Array.isArray(overview.data) ? overview.data[0] : overview.data;
-        const posList = Array.isArray(positions.data) ? positions.data : (positions.data?.data || []);
-        const histList = Array.isArray(historical.data) ? historical.data : (historical.data?.data || []);
+        const ovRow = firstRow(overview);
+        const posList = rows(positions);
+        const histList = rows(historical);
         return {
           overview: ovRow,
           positions: posList,
           historical: histList,
-          revenue: revenue.data,
+          revenue: unwrap(revenue),
           _ui: "portfolio",
           wallet,
         };
@@ -127,11 +149,16 @@ async function executeTool(name: string, args: any, wallet: string | null) {
         if (args.minVolume24h) p.minVol24h = args.minVolume24h;
         if (args.sortBy) p.sortBy = args.sortBy;
         const r = await callProxy("discoverPools", p);
-        return { pools: r.data, _ui: "pools" };
+        return { pools: unwrap(r), _ui: "pools" };
       }
       case "get_pool": {
-        const r = await callProxy("poolInfo", { poolId: args.poolId });
-        return { pool: r.data, _ui: "pool" };
+        const [info, stats, positions, lpers] = await Promise.all([
+          callProxy("poolInfo", { poolId: args.poolId }),
+          callProxy("poolOnchainStats", { poolId: args.poolId }),
+          callProxy("poolPositions", { poolId: args.poolId, page: 1, pageSize: 20, status: "Open" }),
+          callProxy("poolTopLpers", { poolId: args.poolId, page: 1, limit: 20 }),
+        ]);
+        return { pool: unwrap(info), stats: firstRow(stats?.data?.poolStats ? stats.data.poolStats : stats), positions: rows(positions), lpers: rows(lpers), _ui: "pool" };
       }
       case "quote_zap_in": {
         const info = await callProxy("poolInfo", { poolId: args.poolId });
@@ -140,14 +167,14 @@ async function executeTool(name: string, args: any, wallet: string | null) {
           poolId: args.poolId,
           amountSol: args.amountSol,
           strategy: args.strategy || "Spot",
-          poolInfo: info.data,
+          poolInfo: unwrap(info),
           _ui: "zap_in_card",
         };
       }
       case "quote_zap_out": {
         const bps = args.bps || 10000;
         const r = await callProxy("zapOutQuote", undefined, { id: args.positionId, bps });
-        return { intent: "zap_out", positionId: args.positionId, bps, quote: r.data, _ui: "zap_out_card" };
+        return { intent: "zap_out", positionId: args.positionId, bps, quote: unwrap(r), _ui: "zap_out_card" };
       }
     }
   } catch (e) {
@@ -180,6 +207,7 @@ Deno.serve(async (req) => {
           messages: convo,
           tools: TOOLS,
           tool_choice: "auto",
+          max_tokens: 2048,
         }),
       });
       if (!aiRes.ok) {
@@ -195,7 +223,7 @@ Deno.serve(async (req) => {
 
       const calls = msg.tool_calls;
       if (!calls || calls.length === 0) {
-        return new Response(JSON.stringify({ content: msg.content || "", toolResults: toolResultsForUI }), {
+        return new Response(JSON.stringify({ content: msg.content || fallbackSummary(toolResultsForUI), toolResults: toolResultsForUI }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -212,7 +240,7 @@ Deno.serve(async (req) => {
         });
       }
     }
-    return new Response(JSON.stringify({ content: "I tried multiple steps but couldn't finish. Please rephrase.", toolResults: toolResultsForUI }), {
+    return new Response(JSON.stringify({ content: fallbackSummary(toolResultsForUI) || "I tried multiple steps but couldn't finish. Please rephrase.", toolResults: toolResultsForUI }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
@@ -223,3 +251,14 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+function fallbackSummary(toolResults: any[]) {
+  const last = toolResults.at(-1)?.result;
+  if (!last) return "";
+  if (last.error) return `LP Agent returned an error: ${last.error}`;
+  if (last._ui === "pools") return `I found ${Array.isArray(last.pools) ? last.pools.length : 0} live pools from LP Agent. Open a pool card to inspect details or start a Zap.`;
+  if (last._ui === "portfolio") return `I loaded the wallet portfolio from LP Agent: ${(last.positions || []).length} open positions found.`;
+  if (last._ui === "pool") return `I loaded live pool details, on-chain stats, open positions and LPers from LP Agent.`;
+  if (last._ui?.includes("zap")) return `I prepared the Zap quote. Review it and confirm before signing.`;
+  return "I loaded live LP Agent data for your request.";
+}
