@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { lp, fmtUsd, fmtPct, fmtNum, pick, shortAddr, listRows, unwrap, protocolLabel } from "@/lib/lpAgent";
+import { lp, fmtUsd, fmtPct, fmtNum, shortAddr, listRows, unwrap, protocolLabel } from "@/lib/lpAgent";
+import { tokenIcon } from "@/lib/gecko";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/Stat";
+import { PulseCell } from "@/components/PulseCell";
+import { CandleChart } from "@/components/CandleChart";
+import { TradesFeed } from "@/components/TradesFeed";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Zap, ExternalLink, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { ArrowLeft, Zap, ExternalLink } from "lucide-react";
 import { ZapDrawer, ZapIntent } from "@/components/ZapDrawer";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from "recharts";
 
 export default function PoolDetail() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +19,7 @@ export default function PoolDetail() {
   const [stats, setStats] = useState<any>(null);
   const [topLpers, setTopLpers] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
+  const [discover, setDiscover] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [intent, setIntent] = useState<ZapIntent | null>(null);
 
@@ -25,47 +29,43 @@ export default function PoolDetail() {
     Promise.allSettled([
       lp("poolInfo", { poolId: id }),
       lp("poolOnchainStats", { poolId: id }),
-      lp("poolTopLpers", { poolId: id, page: 1, limit: 100 }),
+      lp("poolTopLpers", { poolId: id, page: 1, limit: 50, sort_order: "desc" }),
       lp("poolPositions", { poolId: id, page: 1, pageSize: 20, status: "Open" }),
-    ]).then(([i, s, t, p]) => {
+      lp("discoverPools", { search: id, pageSize: 1 }),
+    ]).then(([i, s, t, p, d]) => {
       setInfo(i.status === "fulfilled" ? unwrap(i.value) : null);
       const sd = s.status === "fulfilled" ? unwrap(s.value) : null;
       setStats(sd?.poolStats?.[0] ?? sd);
       setTopLpers(t.status === "fulfilled" ? listRows(t.value) : []);
       setPositions(p.status === "fulfilled" ? listRows(p.value) : []);
+      setDiscover(d.status === "fulfilled" ? listRows(d.value)[0] : null);
     }).finally(() => setLoading(false));
   }, [id]);
 
-  const t0 = info?.tokenInfo?.[0]?.data?.[0];
-  const t1 = info?.tokenInfo?.[1]?.data?.[0];
-  const sym0 = t0?.symbol || "?";
-  const sym1 = t1?.symbol || "?";
-  const primary = t1 || t0;
-  const proto = info?.type;
+  const t0info = info?.tokenInfo?.[0]?.data?.[0];
+  const t1info = info?.tokenInfo?.[1]?.data?.[0];
+  const sym0 = t0info?.symbol || discover?.token0_symbol || "?";
+  const sym1 = t1info?.symbol || discover?.token1_symbol || "?";
+  const mint0 = discover?.token0;
+  const mint1 = discover?.token1;
+  const proto = info?.type || discover?.protocol;
 
-  // Build price chart from token1 (typically SOL/USDC) stats5m..stats24h
-  const priceChange = useMemo(() => {
-    if (!t1) return [];
-    const rows: any[] = [];
-    const map: any = { "5m": t1.stats5m, "1h": t1.stats1h, "6h": t1.stats6h, "24h": t1.stats24h };
-    for (const k of ["5m", "1h", "6h", "24h"]) {
-      const v = map[k];
-      if (v) rows.push({ window: k, change: v.priceChange ?? 0, volume: (v.buyVolume ?? 0) + (v.sellVolume ?? 0), buys: v.numBuys ?? 0, sells: v.numSells ?? 0 });
-    }
-    return rows;
-  }, [t1]);
-
-  const buySell = useMemo(() => priceChange.map((r) => ({ window: r.window, buys: r.buys, sells: r.sells })), [priceChange]);
+  // Prefer the non-stable / non-SOL token for the price chart context
+  const price = discover?.usd_price ?? t1info?.usdPrice ?? t0info?.usdPrice;
+  const mcap = discover?.mcap ?? t1info?.mcap ?? t0info?.mcap;
+  const liquidity = discover?.tvl ?? info?.poolDb?.tvl ?? stats?.total_input_value;
 
   return (
     <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <Link to="/pools" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
         <div className="flex-1">
-          {loading && !info ? <Skeleton className="h-7 w-48" /> : (
+          {loading && !discover ? <Skeleton className="h-7 w-48" /> : (
             <div className="flex items-center gap-2">
-              {t0?.icon && <img src={t0.icon} className="h-7 w-7 rounded-full" alt="" onError={(e) => (e.currentTarget.style.display = "none")} />}
-              {t1?.icon && <img src={t1.icon} className="h-7 w-7 rounded-full -ml-3" alt="" onError={(e) => (e.currentTarget.style.display = "none")} />}
+              <span className="flex items-center">
+                <img src={t0info?.icon || tokenIcon(mint0)} alt="" className="h-7 w-7 rounded-full bg-secondary" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                <img src={t1info?.icon || tokenIcon(mint1)} alt="" className="h-7 w-7 rounded-full bg-secondary -ml-3" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+              </span>
               <h1 className="text-2xl font-semibold">{sym0} / {sym1}</h1>
               <Badge variant="outline" className="text-xs">{protocolLabel(proto)}</Badge>
             </div>
@@ -73,74 +73,40 @@ export default function PoolDetail() {
           <div className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-2">
             {shortAddr(id, 6)}
             <a href={`https://app.meteora.ag/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>
+            <a href={`https://www.geckoterminal.com/solana/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground">GeckoTerminal</a>
           </div>
         </div>
-        <Button className="bg-primary text-primary-foreground" onClick={() => setIntent({ kind: "in", pool: { pool: id, token0_symbol: sym0, token1_symbol: sym1, ...info } })}>
+        <Button className="bg-primary text-primary-foreground" onClick={() => setIntent({ kind: "in", pool: { pool: id, token0_symbol: sym0, token1_symbol: sym1, ...discover, ...info } })}>
           <Zap className="h-4 w-4" /> Zap In
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-        <Stat label={`${primary?.symbol || sym1} Price`} value={primary?.usdPrice != null ? fmtUsd(primary.usdPrice, { digits: primary.usdPrice < 1 ? 6 : 2 }) : "—"} />
-        <Stat label="Market Cap" value={primary?.mcap != null ? fmtUsd(primary.mcap, { compact: true }) : "—"} />
-        <Stat label="Liquidity" value={primary?.liquidity != null ? fmtUsd(primary.liquidity, { compact: true }) : "—"} />
-        <Stat label="TVL" value={fmtUsd(info?.poolDb?.tvl ?? stats?.total_input_value, { compact: true })} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <Stat label="Price" value={price != null ? fmtUsd(price, { digits: price < 1 ? 6 : 2 }) : "—"} />
+        <Stat label="Market Cap" value={mcap != null ? fmtUsd(mcap, { compact: true }) : "—"} />
+        <Stat label="Liquidity / TVL" value={fmtUsd(liquidity, { compact: true })} />
+        <Stat label="Vol 24h" value={fmtUsd(discover?.vol_24h, { compact: true })} />
         <Stat label="Open Positions" value={fmtNum(stats?.total_open_positions ?? positions.length, 0)} />
-        <Stat label="Unique LPers" value={fmtNum(stats?.unique_owners ?? 0, 0)} />
+        <Stat label="Unique LPers" value={fmtNum(stats?.unique_owners ?? topLpers.length, 0)} />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <div className="font-semibold text-sm">Price Change ({sym1})</div>
-              <div className="text-xs text-muted-foreground">Across timeframes (5m / 1h / 6h / 24h)</div>
-            </div>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="h-56">
-            {priceChange.length === 0 ? <Empty /> : (
-              <ResponsiveContainer>
-                <BarChart data={priceChange}>
-                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="window" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v.toFixed(1)}%`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtPct(Number(v))} />
-                  <Bar dataKey="change" radius={[4, 4, 0, 0]}>
-                    {priceChange.map((r, i) => (
-                      <Bar key={i} dataKey="change" fill={r.change >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="font-semibold text-sm mb-1">Buy vs Sell Pressure</div>
-          <div className="text-xs text-muted-foreground mb-2">Trade counts across timeframes</div>
-          <div className="h-56">
-            {buySell.length === 0 ? <Empty /> : (
-              <ResponsiveContainer>
-                <BarChart data={buySell}>
-                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="window" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => fmtNum(v, 0)} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtNum(v, 0)} />
-                  <Bar dataKey="buys" fill="hsl(var(--success))" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="sells" fill="hsl(var(--destructive))" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-xs">
+        <div className="rounded border border-border bg-card p-3"><div className="text-muted-foreground">5m</div><PulseCell value={Number(discover?.price_5m_change || 0)} /></div>
+        <div className="rounded border border-border bg-card p-3"><div className="text-muted-foreground">1h</div><PulseCell value={Number(discover?.price_1h_change || 0)} /></div>
+        <div className="rounded border border-border bg-card p-3"><div className="text-muted-foreground">6h</div><PulseCell value={Number(discover?.price_6h_change || 0)} /></div>
+        <div className="rounded border border-border bg-card p-3"><div className="text-muted-foreground">24h</div><PulseCell value={Number(discover?.price_24h_change || 0)} /></div>
       </div>
 
-      {/* Top LPers */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border font-semibold">All LPers returned by LP Agent ({topLpers.length})</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
+        <div className="lg:col-span-2"><CandleChart pool={id!} quoteSymbol={sym1} /></div>
+        <TradesFeed pool={id!} />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border font-semibold flex items-center justify-between">
+          <span>Top LPers · {topLpers.length}</span>
+          <span className="text-xs text-muted-foreground font-normal">Ranked by ROI</span>
+        </div>
         {loading ? (
           <div className="p-4 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
         ) : topLpers.length === 0 ? (
@@ -149,8 +115,7 @@ export default function PoolDetail() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Wallet</TableHead>
+                <TableHead>#</TableHead><TableHead>Wallet</TableHead>
                 <TableHead className="text-right">Inflow</TableHead>
                 <TableHead className="text-right">Fees</TableHead>
                 <TableHead className="text-right">PnL</TableHead>
@@ -167,9 +132,9 @@ export default function PoolDetail() {
                     <Link to={`/portfolio?wallet=${l.owner}`} className="font-mono text-sm hover:text-primary">{shortAddr(l.owner, 6)}</Link>
                   </TableCell>
                   <TableCell className="text-right num">{fmtUsd(l.total_inflow, { compact: true })}</TableCell>
-                  <TableCell className="text-right num text-success">{fmtUsd(l.total_fee, { compact: true })}</TableCell>
-                  <TableCell className={`text-right num ${l.total_pnl > 0 ? "text-success" : l.total_pnl < 0 ? "text-destructive" : ""}`}>{fmtUsd(l.total_pnl, { compact: true })}</TableCell>
-                  <TableCell className={`text-right num ${l.roi > 0 ? "text-success" : "text-destructive"}`}>{fmtPct((l.roi ?? 0) * 100)}</TableCell>
+                  <TableCell className="text-right num text-[hsl(var(--success))]">{fmtUsd(l.total_fee, { compact: true })}</TableCell>
+                  <TableCell className={`text-right num ${l.total_pnl > 0 ? "text-[hsl(var(--success))]" : l.total_pnl < 0 ? "text-[hsl(var(--destructive))]" : ""}`}>{fmtUsd(l.total_pnl, { compact: true })}</TableCell>
+                  <TableCell className={`text-right num ${l.roi > 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--destructive))]"}`}>{fmtPct((l.roi ?? 0) * 100)}</TableCell>
                   <TableCell className="text-right num">{fmtPct((l.win_rate ?? 0) * 100, 0)}</TableCell>
                   <TableCell className="text-right num">{l.total_lp ?? 0}</TableCell>
                 </TableRow>
@@ -183,6 +148,3 @@ export default function PoolDetail() {
     </div>
   );
 }
-
-const tooltipStyle = { background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 } as const;
-const Empty = () => <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No data</div>;
