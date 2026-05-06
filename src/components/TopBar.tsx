@@ -40,10 +40,6 @@ export function TopBar() {
           className="pl-9 h-9 bg-card border-border focus-visible:ring-1 focus-visible:ring-primary"
         />
       </form>
-      <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-card text-xs text-muted-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-success" />
-        Solana Mainnet
-      </div>
       <ConnectWalletButton />
     </header>
   );
