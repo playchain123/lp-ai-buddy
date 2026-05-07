@@ -37,35 +37,42 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
   }, [candles]);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
-        <div>
-          <div className="font-semibold text-sm">Price · {quoteSymbol || "Base"}</div>
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="flex flex-wrap items-stretch border-b border-border">
+        <div className="flex-1 min-w-[200px] px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Last Price · {quoteSymbol || ""}</div>
           {stats && (
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-xl font-semibold num">{fmtUsd(stats.last, { digits: stats.last < 1 ? 6 : 4 })}</span>
-              <span className={`text-xs num ${stats.change >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--destructive))]"}`}>
+            <div className="flex items-baseline gap-3 mt-0.5">
+              <span className={`text-2xl font-semibold num ${stats.change >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--destructive))]"}`}>
+                {fmtUsd(stats.last, { digits: stats.last < 1 ? 6 : 4 })}
+              </span>
+              <span className={`text-sm num ${stats.change >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--destructive))]"}`}>
                 {stats.change >= 0 ? "+" : ""}{fmtPct(stats.change)}
               </span>
-              <span className="text-[10px] text-muted-foreground">Vol {fmtUsd(stats.totalVol, { compact: true })}</span>
             </div>
           )}
         </div>
-        <div className="flex gap-1">
+        {stats && (
+          <div className="hidden md:grid grid-cols-3 border-l border-border text-[11px]">
+            <Cell label={`${tf.label} High`} value={fmtUsd(stats.high, { digits: 6 })} />
+            <Cell label={`${tf.label} Low`} value={fmtUsd(stats.low, { digits: 6 })} />
+            <Cell label={`${tf.label} Volume`} value={fmtUsd(stats.totalVol, { compact: true })} />
+          </div>
+        )}
+        <div className="flex items-center gap-1 px-2 border-l border-border">
           {PRESETS.map((p) => (
-            <Button key={p.id} size="sm" variant={tf.id === p.id ? "default" : "outline"} className="h-7 px-2.5 text-xs" onClick={() => setTf(p)}>
+            <Button key={p.id} size="sm" variant={tf.id === p.id ? "default" : "ghost"} className="h-7 px-2.5 text-xs" onClick={() => setTf(p)}>
               {p.label}
             </Button>
           ))}
         </div>
       </div>
-
-      <div className="h-72 relative">
+      <div className="h-[420px] relative">
         {!candles ? <Skeleton className="h-full w-full" /> : candles.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No OHLCV from GeckoTerminal yet for this pool.</div>
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No OHLCV available for this pair yet.</div>
         ) : <CandleSvg candles={candles} onHover={setHover} />}
         {hover && (
-          <div className="absolute top-2 right-2 bg-background/90 border border-border rounded px-2 py-1 text-[11px] num pointer-events-none">
+          <div className="absolute top-2 left-2 bg-background/90 border border-border rounded px-2 py-1 text-[11px] num pointer-events-none">
             <div className="text-muted-foreground">{new Date(hover.t).toLocaleString()}</div>
             <div>O {fmtUsd(hover.o, { digits: 6 })} · C {fmtUsd(hover.c, { digits: 6 })}</div>
             <div>H {fmtUsd(hover.h, { digits: 6 })} · L {fmtUsd(hover.l, { digits: 6 })}</div>
@@ -73,6 +80,15 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-3 py-2 border-l border-border first:border-l-0 min-w-[110px]">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="num text-foreground text-xs">{value}</div>
     </div>
   );
 }
