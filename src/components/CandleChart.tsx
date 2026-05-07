@@ -67,7 +67,7 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
           ))}
         </div>
       </div>
-      <div className="h-[420px] relative">
+      <div className="h-[300px] relative">
         {!candles ? <Skeleton className="h-full w-full" /> : candles.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No OHLCV available for this pair yet.</div>
         ) : <CandleSvg candles={candles} onHover={setHover} />}
