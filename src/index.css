@@ -78,14 +78,16 @@
   }
   .text-positive { @apply text-[hsl(var(--success))]; }
   .text-negative { @apply text-[hsl(var(--destructive))]; }
-  .pulse-up { animation: pulseUp 1.2s ease-out; }
-  .pulse-down { animation: pulseDown 1.2s ease-out; }
+  .pulse-up { animation: pulseUp 1.4s ease-out; }
+  .pulse-down { animation: pulseDown 1.4s ease-out; }
   @keyframes pulseUp {
-    0% { background-color: hsl(var(--success) / 0.25); }
+    0% { background-color: hsl(var(--success) / 0.55); transform: translateY(-2px); }
+    60% { background-color: hsl(var(--success) / 0.18); transform: translateY(0); }
     100% { background-color: transparent; }
   }
   @keyframes pulseDown {
-    0% { background-color: hsl(var(--destructive) / 0.25); }
+    0% { background-color: hsl(var(--destructive) / 0.55); transform: translateY(2px); }
+    60% { background-color: hsl(var(--destructive) / 0.18); transform: translateY(0); }
     100% { background-color: transparent; }
   }
 }
