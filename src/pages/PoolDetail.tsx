@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { lp, fmtUsd, fmtPct, fmtNum, shortAddr, listRows, unwrap, protocolLabel } from "@/lib/lpAgent";
-import { tokenIcon } from "@/lib/gecko";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
