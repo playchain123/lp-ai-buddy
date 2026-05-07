@@ -39,11 +39,12 @@ export async function gtTrades(pool: string, minUsd = 0): Promise<Trade[]> {
   }));
 }
 
-// Multi-source icon resolver — tries Jupiter strict list first, then DexScreener CDN.
+// Multi-source icon resolver — Jupiter image proxy works for almost every Solana mint.
 export const tokenIcon = (mint?: string) =>
-  mint ? `https://cdn.dexscreener.com/tokens/solana/${mint}.png` : undefined;
+  mint ? `https://img.jup.ag/${mint}` : undefined;
 export const tokenIconFallbacks = (mint?: string) => mint ? [
-  `https://cdn.dexscreener.com/tokens/solana/${mint}.png`,
-  `https://wsrv.nl/?url=https://img.jup.ag/${mint}.png&w=64&h=64`,
+  `https://img.jup.ag/${mint}`,
+  `https://wsrv.nl/?url=https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png&w=64&h=64`,
   `https://wsrv.nl/?url=https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${mint}/logo.png&w=64&h=64`,
+  `https://wsrv.nl/?url=https://static.jup.ag/coins/${mint}.png&w=64&h=64`,
 ] : [];
