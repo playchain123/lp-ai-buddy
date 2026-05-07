@@ -34,26 +34,24 @@ export default function Pools() {
   const [intent, setIntent] = useState<ZapIntent | null>(null);
 
   const load = async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && pools.length === 0) setLoading(true);
     try {
       const res = await lp("discoverPools", { search: search || undefined, sortBy, sortOrder: "desc", pageSize: 50 });
       setPools(listRows(res));
       if (!search) {
-        // Trending = pools with highest 1h volume right now
         const tr = await lp("discoverPools", { sortBy: "vol_24h", sortOrder: "desc", pageSize: 12 });
         const rows = listRows(tr).sort((a, b) => Number(b.vol_1h || 0) - Number(a.vol_1h || 0)).slice(0, 8);
         setTrending(rows);
       }
     } catch (e) {
       console.error(e);
-      if (!silent) setPools([]);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [sortBy]);
-  useEffect(() => { const id = setInterval(() => load(true), 15_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
+  useEffect(() => { const id = setInterval(() => load(true), 5_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
 
   // Live debounce search
   useEffect(() => {
