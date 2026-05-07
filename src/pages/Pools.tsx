@@ -51,7 +51,7 @@ export default function Pools() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [sortBy]);
-  useEffect(() => { const id = setInterval(() => load(true), 15_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
+  useEffect(() => { const id = setInterval(() => load(true), 5_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
 
   // Live debounce search
   useEffect(() => {
