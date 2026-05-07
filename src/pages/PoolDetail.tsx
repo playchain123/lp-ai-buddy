@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { lp, fmtUsd, fmtPct, fmtNum, shortAddr, listRows, unwrap, protocolLabel } from "@/lib/lpAgent";
-import { tokenIcon } from "@/lib/gecko";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/Stat";
 import { PulseCell } from "@/components/PulseCell";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { TokenIcon } from "@/components/TokenIcon";
 import { CandleChart } from "@/components/CandleChart";
 import { TradesFeed } from "@/components/TradesFeed";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -63,8 +65,8 @@ export default function PoolDetail() {
           {loading && !discover ? <Skeleton className="h-7 w-48" /> : (
             <div className="flex items-center gap-2">
               <span className="flex items-center">
-                <img src={t0info?.icon || tokenIcon(mint0)} alt="" className="h-7 w-7 rounded-full bg-secondary" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                <img src={t1info?.icon || tokenIcon(mint1)} alt="" className="h-7 w-7 rounded-full bg-secondary -ml-3" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                <TokenIcon mint={mint0} symbol={sym0} size={28} />
+                <TokenIcon mint={mint1} symbol={sym1} size={28} className="-ml-3" />
               </span>
               <h1 className="text-2xl font-semibold">{sym0} / {sym1}</h1>
               <Badge variant="outline" className="text-xs">{protocolLabel(proto)}</Badge>
@@ -73,7 +75,7 @@ export default function PoolDetail() {
           <div className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-2">
             {shortAddr(id, 6)}
             <a href={`https://app.meteora.ag/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>
-            <a href={`https://www.geckoterminal.com/solana/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground">GeckoTerminal</a>
+            <a href={`https://solscan.io/account/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground">Solscan</a>
           </div>
         </div>
         <Button className="bg-primary text-primary-foreground" onClick={() => setIntent({ kind: "in", pool: { pool: id, token0_symbol: sym0, token1_symbol: sym1, ...discover, ...info } })}>
@@ -82,10 +84,10 @@ export default function PoolDetail() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-        <Stat label="Price" value={price != null ? fmtUsd(price, { digits: price < 1 ? 6 : 2 }) : "—"} />
-        <Stat label="Market Cap" value={mcap != null ? fmtUsd(mcap, { compact: true }) : "—"} />
-        <Stat label="Liquidity / TVL" value={fmtUsd(liquidity, { compact: true })} />
-        <Stat label="Vol 24h" value={fmtUsd(discover?.vol_24h, { compact: true })} />
+        <Stat label="Price" value={price != null ? <AnimatedNumber value={Number(price)} format={(n) => fmtUsd(n, { digits: n < 1 ? 6 : 2 })} /> : "—"} />
+        <Stat label="Market Cap" value={mcap != null ? <AnimatedNumber value={Number(mcap)} format={(n) => fmtUsd(n, { compact: true })} /> : "—"} />
+        <Stat label="Liquidity / TVL" value={<AnimatedNumber value={Number(liquidity || 0)} format={(n) => fmtUsd(n, { compact: true })} />} />
+        <Stat label="Vol 24h" value={<AnimatedNumber value={Number(discover?.vol_24h || 0)} format={(n) => fmtUsd(n, { compact: true })} />} />
         <Stat label="Open Positions" value={fmtNum(stats?.total_open_positions ?? positions.length, 0)} />
         <Stat label="Unique LPers" value={fmtNum(stats?.unique_owners ?? topLpers.length, 0)} />
       </div>
@@ -97,15 +99,15 @@ export default function PoolDetail() {
         <div className="rounded border border-border bg-card p-3"><div className="text-muted-foreground">24h</div><PulseCell value={Number(discover?.price_24h_change || 0)} /></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
-        <div className="lg:col-span-2"><CandleChart pool={id!} quoteSymbol={sym1} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-3 mb-6">
+        <CandleChart pool={id!} quoteSymbol={sym1} />
         <TradesFeed pool={id!} />
       </div>
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="px-4 py-3 border-b border-border font-semibold flex items-center justify-between">
-          <span>Top LPers · {topLpers.length}</span>
-          <span className="text-xs text-muted-foreground font-normal">Ranked by ROI</span>
+          <span>LP Leaderboard · {topLpers.length}</span>
+          <span className="text-xs text-muted-foreground font-normal">Live ranking from LP Agent · sorted by ROI</span>
         </div>
         {loading ? (
           <div className="p-4 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>

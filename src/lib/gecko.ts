@@ -39,5 +39,11 @@ export async function gtTrades(pool: string, minUsd = 0): Promise<Trade[]> {
   }));
 }
 
+// Multi-source icon resolver — tries Jupiter strict list first, then DexScreener CDN.
 export const tokenIcon = (mint?: string) =>
   mint ? `https://cdn.dexscreener.com/tokens/solana/${mint}.png` : undefined;
+export const tokenIconFallbacks = (mint?: string) => mint ? [
+  `https://cdn.dexscreener.com/tokens/solana/${mint}.png`,
+  `https://wsrv.nl/?url=https://img.jup.ag/${mint}.png&w=64&h=64`,
+  `https://wsrv.nl/?url=https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${mint}/logo.png&w=64&h=64`,
+] : [];

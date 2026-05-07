@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { lp, fmtUsd, fmtPct, shortAddr, listRows, protocolLabel } from "@/lib/lpAgent";
-import { tokenIcon } from "@/lib/gecko";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { PulseCell } from "@/components/PulseCell";
+import { TokenIcon } from "@/components/TokenIcon";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Zap, ArrowUpDown, ExternalLink } from "lucide-react";
+import { Search, Zap, ArrowUpDown, ExternalLink, Flame } from "lucide-react";
 import { ZapDrawer, ZapIntent } from "@/components/ZapDrawer";
 
 type Sort = "tvl" | "vol_24h" | "fee_tvl_ratio" | "mcap";
@@ -16,12 +17,11 @@ const SORT_LABELS: Record<Sort, string> = {
   vol_24h: "Volume 24h", tvl: "TVL", mcap: "Market Cap", fee_tvl_ratio: "Fee/TVL",
 };
 
-const PoolIcon = ({ mint, sym }: { mint?: string; sym: string }) => {
-  const [err, setErr] = useState(false);
-  const url = tokenIcon(mint);
-  if (!url || err) return <span className="h-5 w-5 rounded-full bg-secondary inline-flex items-center justify-center text-[9px] font-medium">{sym.slice(0, 2)}</span>;
-  return <img src={url} alt={sym} className="h-5 w-5 rounded-full bg-secondary" onError={() => setErr(true)} />;
-};
+const dollarsCompact = (n: number) => fmtUsd(n, { compact: true });
+const dollarsPrice = (n: number) => fmtUsd(n, { digits: n < 1 ? 6 : 2 });
+
+// Real 24h fees in USD = vol_24h * fee%
+const feeUsd24h = (p: any) => (Number(p.vol_24h || 0) * Number(p.fee || 0)) / 100;
 
 export default function Pools() {
   const [params, setParams] = useSearchParams();
@@ -29,6 +29,7 @@ export default function Pools() {
   const [search, setSearch] = useState(params.get("search") || "");
   const [sortBy, setSortBy] = useState<Sort>("vol_24h");
   const [pools, setPools] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [intent, setIntent] = useState<ZapIntent | null>(null);
 
@@ -37,6 +38,12 @@ export default function Pools() {
     try {
       const res = await lp("discoverPools", { search: search || undefined, sortBy, sortOrder: "desc", pageSize: 50 });
       setPools(listRows(res));
+      if (!search) {
+        // Trending = pools with highest 1h volume right now
+        const tr = await lp("discoverPools", { sortBy: "vol_24h", sortOrder: "desc", pageSize: 12 });
+        const rows = listRows(tr).sort((a, b) => Number(b.vol_1h || 0) - Number(a.vol_1h || 0)).slice(0, 8);
+        setTrending(rows);
+      }
     } catch (e) {
       console.error(e);
       if (!silent) setPools([]);
@@ -46,29 +53,54 @@ export default function Pools() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [sortBy]);
-  useEffect(() => { const id = setInterval(() => load(true), 20_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
+  useEffect(() => { const id = setInterval(() => load(true), 15_000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [sortBy, search]);
 
-  const onSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setParams(search ? { search } : {});
-    load();
-  };
+  // Live debounce search
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setParams(search ? { search } : {});
+      load();
+    }, 350);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line
+  }, [search]);
 
   return (
     <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Discover Pools</h1>
-          <p className="text-sm text-muted-foreground">Meteora DLMM &amp; DAMM v2 — live data via LP Agent · auto-refresh 20s</p>
+          <p className="text-sm text-muted-foreground">Meteora DLMM &amp; DAMM v2 — live data via LP Agent · auto-refresh 15s</p>
         </div>
-        <form onSubmit={onSearch} className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search token (SOL, USDC, JUP…)" className="pl-9 h-10 bg-card" />
-          </div>
-          <Button type="submit" variant="outline">Search</Button>
-        </form>
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search token (SOL, USDC, JUP, mint…)" className="pl-9 h-10 bg-card" />
+        </div>
       </div>
+
+      {trending.length > 0 && !search && (
+        <div className="mb-4 rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <Flame className="h-3.5 w-3.5 text-warning" /> Trending now · zap in to ride momentum
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {trending.map((p) => (
+              <button
+                key={p.pool}
+                onClick={() => navigate(`/pools/${p.pool}`)}
+                className="shrink-0 rounded-md border border-border bg-background hover:border-primary/50 px-3 py-2 text-left transition-colors min-w-[200px]"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex"><TokenIcon mint={p.token0} symbol={p.token0_symbol} size={18} /><TokenIcon mint={p.token1} symbol={p.token1_symbol} size={18} className="-ml-1.5" /></span>
+                  <span className="text-sm font-medium">{p.token0_symbol}/{p.token1_symbol}</span>
+                  <PulseCell value={Number(p.price_1h_change || 0)} />
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-1 num">Vol 1h <AnimatedNumber value={Number(p.vol_1h || 0)} format={dollarsCompact} /></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mb-3 text-xs flex-wrap">
         <span className="text-muted-foreground">Sort:</span>
@@ -93,11 +125,10 @@ export default function Pools() {
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">TVL</TableHead>
                 <TableHead className="text-right">Vol 24h</TableHead>
-                <TableHead className="text-right">Vol 1h</TableHead>
+                <TableHead className="text-right">Fees 24h</TableHead>
                 <TableHead className="text-right">5m</TableHead>
                 <TableHead className="text-right">1h</TableHead>
                 <TableHead className="text-right">24h</TableHead>
-                <TableHead className="text-right">Fee</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -107,8 +138,8 @@ export default function Pools() {
                   <TableCell>
                     <div className="flex items-center gap-2 font-medium">
                       <span className="flex items-center">
-                        <PoolIcon mint={p.token0} sym={p.token0_symbol || "?"} />
-                        <span className="-ml-1.5"><PoolIcon mint={p.token1} sym={p.token1_symbol || "?"} /></span>
+                        <TokenIcon mint={p.token0} symbol={p.token0_symbol} size={20} />
+                        <TokenIcon mint={p.token1} symbol={p.token1_symbol} size={20} className="-ml-1.5" />
                       </span>
                       {p.token0_symbol || "?"} / {p.token1_symbol || "?"}
                     </div>
@@ -118,14 +149,13 @@ export default function Pools() {
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px]">{protocolLabel(p.protocol)}</Badge></TableCell>
-                  <TableCell className="text-right num">{p.usd_price ? fmtUsd(p.usd_price, { digits: p.usd_price < 1 ? 6 : 2 }) : "—"}</TableCell>
-                  <TableCell className="text-right num">{fmtUsd(p.tvl, { compact: true })}</TableCell>
-                  <TableCell className="text-right num">{fmtUsd(p.vol_24h, { compact: true })}</TableCell>
-                  <TableCell className="text-right num text-muted-foreground">{fmtUsd(p.vol_1h, { compact: true })}</TableCell>
+                  <TableCell className="text-right"><AnimatedNumber value={Number(p.usd_price || 0)} format={dollarsPrice} /></TableCell>
+                  <TableCell className="text-right"><AnimatedNumber value={Number(p.tvl || 0)} format={dollarsCompact} /></TableCell>
+                  <TableCell className="text-right"><AnimatedNumber value={Number(p.vol_24h || 0)} format={dollarsCompact} /></TableCell>
+                  <TableCell className="text-right"><AnimatedNumber value={feeUsd24h(p)} format={dollarsCompact} /></TableCell>
                   <TableCell className="text-right"><PulseCell value={Number(p.price_5m_change || 0)} /></TableCell>
                   <TableCell className="text-right"><PulseCell value={Number(p.price_1h_change || 0)} /></TableCell>
                   <TableCell className="text-right"><PulseCell value={Number(p.price_24h_change || 0)} /></TableCell>
-                  <TableCell className="text-right num">{fmtPct(Number(p.fee || 0))}</TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" className="bg-primary text-primary-foreground" onClick={(e) => { e.stopPropagation(); setIntent({ kind: "in", pool: p }); }}>
                       <Zap className="h-3.5 w-3.5" /> Zap In

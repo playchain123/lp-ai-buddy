@@ -30,7 +30,7 @@ export function TradesFeed({ pool }: { pool: string }) {
       <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <div className="font-semibold text-sm">Live Trades · Buy vs Sell Pressure</div>
-          <span className="text-[10px] text-muted-foreground">Auto-refresh 15s · GeckoTerminal</span>
+          <span className="text-[10px] text-muted-foreground">Live · refresh 15s</span>
         </div>
         {summary && (
           <>
