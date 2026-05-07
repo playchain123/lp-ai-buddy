@@ -73,7 +73,7 @@ export default function PoolDetail() {
           <div className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-2">
             {shortAddr(id, 6)}
             <a href={`https://app.meteora.ag/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>
-            <a href={`https://www.geckoterminal.com/solana/pools/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground">GeckoTerminal</a>
+            <a href={`https://solscan.io/account/${id}`} target="_blank" rel="noreferrer" className="hover:text-foreground">Solscan</a>
           </div>
         </div>
         <Button className="bg-primary text-primary-foreground" onClick={() => setIntent({ kind: "in", pool: { pool: id, token0_symbol: sym0, token1_symbol: sym1, ...discover, ...info } })}>
