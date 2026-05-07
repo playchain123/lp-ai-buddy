@@ -65,8 +65,8 @@ export default function PoolDetail() {
           {loading && !discover ? <Skeleton className="h-7 w-48" /> : (
             <div className="flex items-center gap-2">
               <span className="flex items-center">
-                <img src={t0info?.icon || tokenIcon(mint0)} alt="" className="h-7 w-7 rounded-full bg-secondary" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                <img src={t1info?.icon || tokenIcon(mint1)} alt="" className="h-7 w-7 rounded-full bg-secondary -ml-3" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                <TokenIcon mint={mint0} symbol={sym0} size={28} />
+                <TokenIcon mint={mint1} symbol={sym1} size={28} className="-ml-3" />
               </span>
               <h1 className="text-2xl font-semibold">{sym0} / {sym1}</h1>
               <Badge variant="outline" className="text-xs">{protocolLabel(proto)}</Badge>
