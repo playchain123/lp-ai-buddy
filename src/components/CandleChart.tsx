@@ -229,15 +229,16 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
       </div>
 
       <div className="relative h-[390px]">
+        <div ref={containerRef} className="h-full w-full" />
         {!candles ? (
-          <Skeleton className="h-full w-full" />
+          <div className="absolute inset-0">
+            <Skeleton className="h-full w-full" />
+          </div>
         ) : candles.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-card">
             No live OHLCV available for this pool yet.
           </div>
-        ) : (
-          <div ref={containerRef} className="h-full w-full" />
-        )}
+        ) : null}
       </div>
     </div>
   );
