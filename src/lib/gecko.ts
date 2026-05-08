@@ -1,8 +1,35 @@
-// GeckoTerminal public API — no key, CORS friendly. Used for OHLCV + recent trades.
+// Live market data helpers for charts, trades, and token icons.
 const BASE = "https://api.geckoterminal.com/api/v2";
+const METEORA_DAMM_BASE = "https://damm-v2.datapi.meteora.ag";
 
 export type Tf = "minute" | "hour" | "day";
 export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+export type MarketTf = "30m" | "1h" | "4h" | "1d";
+
+const GECKO_TF_MAP: Record<MarketTf, { tf: Tf; aggregate: number }> = {
+  "30m": { tf: "minute", aggregate: 30 },
+  "1h": { tf: "hour", aggregate: 1 },
+  "4h": { tf: "hour", aggregate: 4 },
+  "1d": { tf: "day", aggregate: 1 },
+};
+
+function normalizeCandle(row: any): Candle | null {
+  if (Array.isArray(row) && row.length >= 6) {
+    return { t: Number(row[0]) * 1000, o: +row[1], h: +row[2], l: +row[3], c: +row[4], v: +row[5] };
+  }
+  if (!row || typeof row !== "object") return null;
+
+  const ts = Number(row.time ?? row.timestamp ?? row.t ?? row.start_time ?? row.open_time ?? 0);
+  const open = Number(row.open ?? row.o ?? 0);
+  const high = Number(row.high ?? row.h ?? 0);
+  const low = Number(row.low ?? row.l ?? 0);
+  const close = Number(row.close ?? row.c ?? 0);
+  const volume = Number(row.volume ?? row.v ?? 0);
+
+  if (!ts || [open, high, low, close].some((n) => !Number.isFinite(n))) return null;
+  return { t: ts > 1e12 ? ts : ts * 1000, o: open, h: high, l: low, c: close, v: Number.isFinite(volume) ? volume : 0 };
+}
 
 export async function gtOhlcv(pool: string, timeframe: Tf, aggregate: number, limit = 120): Promise<Candle[]> {
   const url = `${BASE}/networks/solana/pools/${pool}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
@@ -14,6 +41,25 @@ export async function gtOhlcv(pool: string, timeframe: Tf, aggregate: number, li
   return list
     .map((row) => ({ t: row[0] * 1000, o: +row[1], h: +row[2], l: +row[3], c: +row[4], v: +row[5] }))
     .sort((a, b) => a.t - b.t);
+}
+
+export async function livePoolOhlcv(pool: string, timeframe: MarketTf, limit = 120): Promise<Candle[]> {
+  const meteoraUrl = `${METEORA_DAMM_BASE}/pools/${pool}/ohlcv?timeframe=${timeframe}&limit=${limit}`;
+
+  try {
+    const res = await fetch(meteoraUrl, { headers: { Accept: "application/json" } });
+    if (res.ok) {
+      const json = await res.json();
+      const rows: any[] = json?.data || [];
+      const candles = rows.map(normalizeCandle).filter(Boolean) as Candle[];
+      if (candles.length) return candles.sort((a, b) => a.t - b.t);
+    }
+  } catch {
+    // fallback below
+  }
+
+  const fallback = GECKO_TF_MAP[timeframe];
+  return gtOhlcv(pool, fallback.tf, fallback.aggregate, limit);
 }
 
 export type Trade = {

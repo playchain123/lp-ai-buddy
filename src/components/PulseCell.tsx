@@ -7,9 +7,11 @@ export function PulseCell({ value, className }: { value: number; className?: str
   const prev = useRef<number | null>(null);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   useEffect(() => {
-    if (prev.current != null && value !== prev.current) {
+    const previous = prev.current;
+    if (previous != null && value !== previous) {
       setFlash(value > prev.current ? "up" : "down");
       const id = setTimeout(() => setFlash(null), 1200);
+      prev.current = value;
       return () => clearTimeout(id);
     }
     prev.current = value;
