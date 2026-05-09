@@ -202,7 +202,13 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="text-sm font-medium">Chart</div>
+          <div className="text-sm font-medium flex items-center gap-2">
+            Chart
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-positive/15 text-positive">
+              <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse" />
+              LIVE
+            </span>
+          </div>
           <div className="hidden md:flex items-center gap-2 text-xs num">
             {stats && (
               <>
