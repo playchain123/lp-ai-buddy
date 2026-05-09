@@ -141,24 +141,43 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
   useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !candles?.length) return;
 
+    const prev = candlesRef.current;
+    const sameSeries = prev.length && candles.length >= prev.length && prev[0]?.t === candles[0]?.t;
     candlesRef.current = candles;
-    candleSeriesRef.current.setData(
-      candles.map((c) => ({
-        time: Math.floor(c.t / 1000) as any,
-        open: c.o,
-        high: c.h,
-        low: c.l,
-        close: c.c,
-      }))
-    );
-    volumeSeriesRef.current.setData(
-      candles.map((c) => ({
-        time: Math.floor(c.t / 1000) as any,
-        value: c.v,
-        color: c.c >= c.o ? cssHsl("--success", "#22c55e") : cssHsl("--destructive", "#ef4444"),
-      }))
-    );
-    chartRef.current?.timeScale().fitContent();
+
+    const up = cssHsl("--success", "#22c55e");
+    const dn = cssHsl("--destructive", "#ef4444");
+
+    if (sameSeries) {
+      // stream-update only the tail to keep chart smooth & "live"
+      const tail = candles.slice(prev.length - 1);
+      tail.forEach((c) => {
+        candleSeriesRef.current!.update({
+          time: Math.floor(c.t / 1000) as any,
+          open: c.o, high: c.h, low: c.l, close: c.c,
+        });
+        volumeSeriesRef.current!.update({
+          time: Math.floor(c.t / 1000) as any,
+          value: c.v,
+          color: c.c >= c.o ? up : dn,
+        });
+      });
+    } else {
+      candleSeriesRef.current.setData(
+        candles.map((c) => ({
+          time: Math.floor(c.t / 1000) as any,
+          open: c.o, high: c.h, low: c.l, close: c.c,
+        }))
+      );
+      volumeSeriesRef.current.setData(
+        candles.map((c) => ({
+          time: Math.floor(c.t / 1000) as any,
+          value: c.v,
+          color: c.c >= c.o ? up : dn,
+        }))
+      );
+      chartRef.current?.timeScale().fitContent();
+    }
   }, [candles]);
 
   const stats = useMemo(() => {
