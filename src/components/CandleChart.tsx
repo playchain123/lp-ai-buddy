@@ -80,15 +80,16 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
       priceLineVisible: true,
       lastValueVisible: true,
       priceScaleId: "right",
-      scaleMargins: { top: 0.08, bottom: 0.28 },
     });
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceScaleId: "",
       priceFormat: { type: "volume" },
-      scaleMargins: { top: 0.78, bottom: 0 },
     });
 
+    chart.priceScale("right").applyOptions({
+      scaleMargins: { top: 0.08, bottom: 0.28 },
+    });
     chart.priceScale("").applyOptions({
       scaleMargins: { top: 0.78, bottom: 0 },
     });
