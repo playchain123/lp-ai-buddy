@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { lp, fmtUsd, fmtPct, fmtNum, shortAddr, listRows, unwrap, protocolLabel } from "@/lib/lpAgent";
+import { lp, fmtUsd, fmtPct, fmtNum, shortAddr, listRows, unwrap, protocolLabel, poolMetric } from "@/lib/lpAgent";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,10 +52,16 @@ export default function PoolDetail() {
   const mint1 = discover?.token1;
   const proto = info?.type || discover?.protocol;
 
-  // Prefer the non-stable / non-SOL token for the price chart context
-  const price = discover?.usd_price ?? t1info?.usdPrice ?? t0info?.usdPrice;
-  const mcap = discover?.mcap ?? t1info?.mcap ?? t0info?.mcap;
-  const liquidity = discover?.tvl ?? info?.poolDb?.tvl ?? stats?.total_input_value;
+  const metricSources = [discover, info?.poolDb, info, stats, t0info, t1info].filter(Boolean);
+  const tokenInfoSources = [t0info, t1info].filter(Boolean);
+  const price = poolMetric(metricSources, ["usd_price", "price", "priceUsd", "usdPrice", "token_price", "tokenPrice"])
+    ?? poolMetric(tokenInfoSources, ["usdPrice", "priceUsd", "price", "currentPrice"]);
+  const mcap = poolMetric(metricSources, ["mcap", "market_cap", "marketCap", "fdv", "fully_diluted_valuation"])
+    ?? poolMetric(tokenInfoSources, ["mcap", "marketCap", "market_cap", "fdv"]);
+  const liquidity = poolMetric(metricSources, ["tvl", "liquidity", "liquidityUsd", "reserve_in_usd", "totalLiquidityUsd", "pool_tvl", "total_input_value"], 0);
+  const volume24h = poolMetric(metricSources, ["vol_24h", "volume24h", "volume_24h", "volumeUsd24h", "volumeUsd", "trade_volume_24h"], 0);
+  const openPositions = poolMetric(metricSources, ["total_open_positions", "open_positions", "openPositions"], positions.length) ?? positions.length;
+  const uniqueLpers = poolMetric(metricSources, ["unique_owners", "unique_lpers", "uniqueLPers", "total_unique_owners", "total_owners"], topLpers.length) ?? topLpers.length;
 
   return (
     <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
@@ -87,9 +93,9 @@ export default function PoolDetail() {
         <Stat label="Price" value={price != null ? <AnimatedNumber value={Number(price)} format={(n) => fmtUsd(n, { digits: n < 1 ? 6 : 2 })} /> : "—"} />
         <Stat label="Market Cap" value={mcap != null ? <AnimatedNumber value={Number(mcap)} format={(n) => fmtUsd(n, { compact: true })} /> : "—"} />
         <Stat label="Liquidity / TVL" value={<AnimatedNumber value={Number(liquidity || 0)} format={(n) => fmtUsd(n, { compact: true })} />} />
-        <Stat label="Vol 24h" value={<AnimatedNumber value={Number(discover?.vol_24h || 0)} format={(n) => fmtUsd(n, { compact: true })} />} />
-        <Stat label="Open Positions" value={fmtNum(stats?.total_open_positions ?? positions.length, 0)} />
-        <Stat label="Unique LPers" value={fmtNum(stats?.unique_owners ?? topLpers.length, 0)} />
+        <Stat label="Vol 24h" value={<AnimatedNumber value={Number(volume24h || 0)} format={(n) => fmtUsd(n, { compact: true })} />} />
+        <Stat label="Open Positions" value={fmtNum(openPositions, 0)} />
+        <Stat label="Unique LPers" value={fmtNum(uniqueLpers, 0)} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-xs">
@@ -100,7 +106,7 @@ export default function PoolDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-3 mb-6">
-        <CandleChart pool={id!} quoteSymbol={sym1} />
+        <CandleChart pool={id!} quoteSymbol={sym1} pairLabel={`${sym0}/${sym1}`} />
         <TradesFeed pool={id!} />
       </div>
 

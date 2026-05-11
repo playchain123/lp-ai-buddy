@@ -72,6 +72,20 @@ Deno.serve(async (req) => {
       case "poolTopLpers":
         result = await lpFetch("GET", `/pools/${params.poolId}/top-lpers`, apiKey, { page: 1, limit: 100, sort_order: "desc", ...params });
         break;
+      case "poolOhlcv": {
+        const { poolId, timeframe = "1h", limit = 160, ...rest } = params;
+        try {
+          result = await lpFetch("GET", `/pools/${poolId}/ohlcv`, apiKey, { timeframe, limit, ...rest });
+        } catch (primaryError) {
+          const url = new URL(`https://damm-v2.datapi.meteora.ag/pools/${poolId}/ohlcv`);
+          url.searchParams.set("timeframe", String(timeframe));
+          url.searchParams.set("limit", String(limit));
+          const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+          if (!res.ok) throw primaryError;
+          result = await res.json();
+        }
+        break;
+      }
 
       // --- Portfolio ---
       case "openPositions":
