@@ -15,6 +15,7 @@ import { fmtPct, fmtUsd } from "@/lib/lpAgent";
 
 type Preset = { id: MarketTf; label: string };
 const PRESETS: Preset[] = [
+  { id: "15m", label: "15m" },
   { id: "30m", label: "30m" },
   { id: "1h", label: "1H" },
   { id: "4h", label: "4H" },
@@ -27,10 +28,17 @@ const cssHsl = (token: string, fallback: string) => {
   return value ? `hsl(${value})` : fallback;
 };
 
-export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?: string }) {
-  const [tf, setTf] = useState<Preset>(PRESETS[1]);
+const cssHsla = (token: string, alpha: number, fallback: string) => {
+  if (typeof window === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  return value ? `hsl(${value} / ${alpha})` : fallback;
+};
+
+export function CandleChart({ pool, quoteSymbol, pairLabel }: { pool: string; quoteSymbol?: string; pairLabel?: string }) {
+  const [tf, setTf] = useState<Preset>(PRESETS[3]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
+  const [crosshairPoint, setCrosshairPoint] = useState<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -43,15 +51,15 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
 
     const chart = createChart(container, {
       autoSize: true,
-      height: 390,
+      height: 360,
       layout: {
-        background: { type: ColorType.Solid, color: cssHsl("--card", "#121318") },
+        background: { type: ColorType.Solid, color: cssHsl("--background", "#07080a") },
         textColor: cssHsl("--muted-foreground", "#8a8f98"),
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: cssHsl("--border", "#252932") },
-        horzLines: { color: cssHsl("--border", "#252932") },
+        vertLines: { color: cssHsla("--border", 0.42, "hsl(220 13% 18% / 0.42)") },
+        horzLines: { color: cssHsla("--border", 0.42, "hsl(220 13% 18% / 0.42)") },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -63,6 +71,11 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
       },
       timeScale: {
         borderColor: cssHsl("--border", "#252932"),
+        barSpacing: 5,
+        minBarSpacing: 2,
+        maxBarSpacing: 7,
+        rightOffset: 8,
+        rightBarStaysOnScroll: true,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -74,7 +87,10 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: cssHsl("--success", "#22c55e"),
       downColor: cssHsl("--destructive", "#ef4444"),
-      borderVisible: false,
+      borderVisible: true,
+      borderUpColor: cssHsl("--success", "#22c55e"),
+      borderDownColor: cssHsl("--destructive", "#ef4444"),
+      wickVisible: true,
       wickUpColor: cssHsl("--success", "#22c55e"),
       wickDownColor: cssHsl("--destructive", "#ef4444"),
       priceLineVisible: true,
@@ -88,7 +104,8 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
     });
 
     chart.priceScale("right").applyOptions({
-      scaleMargins: { top: 0.08, bottom: 0.28 },
+      scaleMargins: { top: 0.12, bottom: 0.25 },
+      entireTextOnly: true,
     });
     chart.priceScale("").applyOptions({
       scaleMargins: { top: 0.78, bottom: 0 },
@@ -96,17 +113,18 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
 
     chart.subscribeCrosshairMove((param) => {
       const time = typeof param.time === "number" ? param.time * 1000 : null;
-      if (!time) {
+      if (!time || !param.point) {
         setHover(null);
+        setCrosshairPoint(null);
         return;
       }
       const match = candlesRef.current.find((c) => Math.floor(c.t / 1000) === Math.floor(time / 1000)) || null;
       setHover(match);
+      setCrosshairPoint({ x: param.point.x, y: param.point.y });
     });
 
     const resizeObserver = new ResizeObserver(() => {
-      chart.applyOptions({ width: container.clientWidth, height: 390 });
-      chart.timeScale().fitContent();
+      chart.applyOptions({ width: container.clientWidth, height: 360 });
     });
     resizeObserver.observe(container);
 
@@ -177,7 +195,10 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
           color: c.c >= c.o ? up : dn,
         }))
       );
-      chartRef.current?.timeScale().fitContent();
+      chartRef.current?.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, candles.length - 78),
+        to: candles.length + 8,
+      });
     }
   }, [candles]);
 
@@ -187,62 +208,63 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
     const first = candles[0].o || 1;
     const last = candles[candles.length - 1].c;
     const change = ((last - first) / first) * 100;
+    const activeChange = active.c - active.o;
+    const activeRange = active.h - active.l;
     const volume = candles.reduce((acc, candle) => acc + candle.v, 0);
     return {
       active,
       last,
       change,
+      activeChange,
+      activeRange,
       high: Math.max(...candles.map((c) => c.h)),
       low: Math.min(...candles.map((c) => c.l)),
       volume,
     };
   }, [candles, hover]);
 
+  const activeTime = stats?.active ? new Date(stats.active.t) : null;
+
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="text-sm font-medium flex items-center gap-2">
-            Chart
-            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-positive/15 text-positive">
-              <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse" />
+    <div className="rounded-lg border border-border bg-background overflow-hidden">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-sm min-w-0">
+            <span className="font-semibold truncate">{pairLabel || "Chart"}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
               LIVE
             </span>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-xs num">
-            {stats && (
-              <>
-                <span className={stats.change >= 0 ? "text-positive" : "text-negative"}>
-                  {fmtUsd(stats.last, { digits: stats.last < 1 ? 6 : 2 })}
-                </span>
-                <span>O {fmtUsd(stats.active.o, { digits: 6 })}</span>
-                <span>H {fmtUsd(stats.active.h, { digits: 6 })}</span>
-                <span>L {fmtUsd(stats.active.l, { digits: 6 })}</span>
-                <span>C {fmtUsd(stats.active.c, { digits: 6 })}</span>
-                <span className={stats.change >= 0 ? "text-positive" : "text-negative"}>
-                  {stats.change >= 0 ? "+" : ""}{fmtPct(stats.change)}
-                </span>
-                <span>Vol {fmtUsd(stats.volume, { compact: true })}</span>
-              </>
-            )}
-          </div>
+          {stats && (
+            <div className="text-right num leading-tight">
+              <div className={stats.change >= 0 ? "text-positive text-xl font-semibold" : "text-negative text-xl font-semibold"}>
+                {fmtUsd(stats.last, { digits: stats.last < 1 ? 6 : 2 })}
+              </div>
+              <div className={stats.change >= 0 ? "text-positive text-xs" : "text-negative text-xs"}>
+                {stats.change >= 0 ? "+" : ""}{fmtPct(stats.change)}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="mt-3 flex items-center gap-4 overflow-x-auto text-sm text-muted-foreground">
+          <span>Time</span>
           {PRESETS.map((preset) => (
             <Button
-              key={preset.id}
+              key={preset.label}
               size="sm"
-              variant={tf.id === preset.id ? "default" : "ghost"}
-              className="h-7 px-2.5 text-xs"
+              variant="ghost"
+              className={`h-7 shrink-0 px-0 text-sm hover:bg-transparent ${tf.label === preset.label ? "text-foreground font-semibold" : "text-muted-foreground"}`}
               onClick={() => setTf(preset)}
             >
               {preset.label}
             </Button>
           ))}
+          <span>Depth</span>
         </div>
       </div>
 
-      <div className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground num md:hidden">
+      <div className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground num">
         {stats ? (
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span className={stats.change >= 0 ? "text-positive" : "text-negative"}>{fmtUsd(stats.last, { digits: stats.last < 1 ? 6 : 2 })}</span>
@@ -254,8 +276,30 @@ export function CandleChart({ pool, quoteSymbol }: { pool: string; quoteSymbol?:
         ) : null}
       </div>
 
-      <div className="relative h-[390px]">
+      <div className="relative h-[360px]">
         <div ref={containerRef} className="h-full w-full" />
+        {stats && pairLabel && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-5xl font-semibold text-muted-foreground/10 tracking-tight">
+            {pairLabel}
+          </div>
+        )}
+        {stats && hover && crosshairPoint ? (
+          <div
+            className="pointer-events-none absolute z-10 rounded-md bg-secondary/90 px-2.5 py-2 text-xs num text-foreground shadow-card backdrop-blur"
+            style={{ left: Math.min(crosshairPoint.x + 12, 210), top: Math.max(8, crosshairPoint.y - 78) }}
+          >
+            <div className="grid grid-cols-[70px_1fr] gap-x-3 gap-y-1">
+              <span>Time</span><span>{activeTime?.toLocaleString()}</span>
+              <span>Open</span><span>{fmtUsd(stats.active.o, { digits: 6 })}</span>
+              <span>High</span><span>{fmtUsd(stats.active.h, { digits: 6 })}</span>
+              <span>Low</span><span>{fmtUsd(stats.active.l, { digits: 6 })}</span>
+              <span>Close</span><span>{fmtUsd(stats.active.c, { digits: 6 })}</span>
+              <span>Change</span><span className={stats.activeChange >= 0 ? "text-positive" : "text-negative"}>{fmtUsd(stats.activeChange, { digits: 6 })} ({fmtPct((stats.activeChange / (stats.active.o || 1)) * 100)})</span>
+              <span>Range</span><span>{fmtUsd(stats.activeRange, { digits: 6 })}</span>
+              <span>Volume</span><span>{fmtUsd(stats.active.v, { compact: true })}</span>
+            </div>
+          </div>
+        ) : null}
         {!candles ? (
           <div className="absolute inset-0">
             <Skeleton className="h-full w-full" />

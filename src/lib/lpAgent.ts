@@ -92,8 +92,22 @@ export const shortAddr = (a?: string | null, n = 4) =>
 
 export const poolAddress = (p: any) => pick(p, ["pool", "address", "poolAddress", "id", "poolId"]);
 
+export const numberFrom = (obj: any, keys: string[], dflt: number | null = null) => {
+  const value = pick(obj, keys);
+  const parsed = typeof value === "string" ? Number(value.replace(/[$,%\s,]/g, "")) : Number(value);
+  return Number.isFinite(parsed) ? parsed : dflt;
+};
+
 export const tokenFromInfo = (info: any, index: 0 | 1) =>
   pick(info, [`tokenInfo.${index}.data.0`], {}) || {};
+
+export const poolMetric = (sources: any[], keys: string[], dflt: number | null = null) => {
+  for (const source of sources) {
+    const value = numberFrom(source, keys, null);
+    if (value != null && value > 0) return value;
+  }
+  return dflt;
+};
 
 export const poolSymbols = (p: any) => {
   const info = p?.__info || p;
