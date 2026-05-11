@@ -14,7 +14,7 @@ Live preview: https://lp-ai-buddy.lovable.app
 - Open and close concentrated-liquidity positions in one click ("Zap In / Zap Out")
 - Watch **real-time exchange-style candlestick charts** for each pool
 - See the top wallets actively LPing in any pool, with their PnL, win rate, and ROI
-- Chat with an AI co-pilot (Lovable AI Gateway) that knows every metric on screen
+- Chat with an AI co-pilot that knows every metric on screen
 - Receive Telegram alerts when something interesting happens to a pool you watch
 
 It is built entirely on top of the [LP Agent](https://lpagent.io) Open API — no scraping, no mock data.
